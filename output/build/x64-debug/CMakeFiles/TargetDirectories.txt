@@ -1,3 +1,0 @@
-C:/Users/Daniel Paolone/Desktop/Main Items/Programming/NESEmulator/output/build/x64-debug/CMakeFiles/NESEmulator.dir
-C:/Users/Daniel Paolone/Desktop/Main Items/Programming/NESEmulator/output/build/x64-debug/CMakeFiles/edit_cache.dir
-C:/Users/Daniel Paolone/Desktop/Main Items/Programming/NESEmulator/output/build/x64-debug/CMakeFiles/rebuild_cache.dir
