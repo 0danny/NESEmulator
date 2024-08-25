@@ -9,6 +9,7 @@ namespace Core
 		Utils::Logger::Info("The emulator is starting...");
 
 		auto& cpu = Emulation::CPU::Instance();
+		auto& romReader = Emulation::RomReader::Instance();
 
 		// Example Program
 		uint8_t program[] = 
@@ -56,7 +57,13 @@ namespace Core
 			0x60              // 801C: RTS       - Return from subroutine
 		};
 
-		cpu.LoadProgram(program3, sizeof(program3), 0x8000);
+		// Load ROM first.
+		if (romReader.LoadRom("games/donkeykong.nes"))
+		{
+			romReader.PrintHeader();
+		}
+		
+		cpu.LoadPrgProgram(romReader.GetPRGRom());
 		cpu.Run();
 
 		return 0;

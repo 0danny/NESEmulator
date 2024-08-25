@@ -12,7 +12,7 @@ endif()
 project ("NESEmulator")
 
 # Add source to this project's executable.
-add_executable (NESEmulator "src/main.cpp"   "src/emulator.cpp" "src/emulator.h" "src/utils/logger.h" "src/emulation/cpu.h" "src/emulation/cpu.cpp"    "src/utils/logger.cpp")
+add_executable (NESEmulator "src/main.cpp"   "src/emulator.cpp" "src/emulator.h" "src/utils/logger.h" "src/emulation/cpu.h" "src/emulation/cpu.cpp"    "src/utils/logger.cpp" "src/emulation/romreader.cpp" "src/emulation/romreader.h")
 
 target_include_directories(NESEmulator PRIVATE ${CMAKE_SOURCE_DIR}/src)
 

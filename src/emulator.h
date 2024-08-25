@@ -2,6 +2,7 @@
 
 #include "utils/logger.h"
 #include "emulation/cpu.h"
+#include "emulation/romreader.h"
 
 namespace Core
 {

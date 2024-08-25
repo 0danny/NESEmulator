@@ -20,10 +20,26 @@
 #define OVERFLOW_FLAG  0x40  // Overflow flag (bit 6)
 #define NEGATIVE_FLAG  0x80  // Negative flag (bit 7)
 
+#define PAGE_NUMBER 0xFF00
+#define PAGE_POSITION 0x00FF
+
 namespace Emulation
 {
 	class CPU
 	{
+	public:
+		using OpcodeHandler = void(CPU::*)();
+
+		void LoadRawProgram(const uint8_t* program, uint16_t programSize, uint16_t loadAddress);
+		void LoadPrgProgram(const std::vector<uint8_t>& prgRom);
+		void Run();
+
+		static CPU& Instance()
+		{
+			static CPU INSTANCE;
+			return INSTANCE;
+		}
+
 	private:
 		uint8_t A = 0;   // Accumulator
 		uint8_t X = 0;   // X Register
@@ -37,6 +53,10 @@ namespace Emulation
 		std::array<uint8_t, 65536> memory = { 0 };
 
 		int cycles = 0;
+
+		bool clocking = true;
+
+		OpcodeHandler opcodeTable[256];
 
 		CPU();
 
@@ -53,33 +73,39 @@ namespace Emulation
 		// Op Code Implementations
 
 		//Single Opcodes
-		void BEQ(uint8_t offset);
-		void BNE(uint8_t offset);
-		void JSR(uint16_t address);
+		void BEQ();
+		void BNE();
+		void BPL();
+
+		void JSR();
 		void INX();
 		void BRK();
 		void NOP();
 		void RTS();
 
+		//Flag OpCodes
+		void CLD();
+		void SEI();
+
 		//LDX
-		void LDX_Imm(uint8_t value);
+		void LDX_Imm();
 
 		//LDA
-		void LDA_Imm(uint8_t value);
-		void LDA_Abs(uint16_t address);
+		void LDA_Imm();
+		void LDA_Abs();
 
 		//STX
-		void STX_Abs(uint16_t address);
-		void STA_ZP(uint8_t address);
+		void STX_Abs();
+		void STA_ZP();
 
 		//ADC
-		void ADC_Abs(uint16_t address);
+		void ADC_Abs();
 
 		//JMP
-		void JMP_Abs(uint16_t address);
+		void JMP_Abs();
 
 		//AND
-		void AND_Imm(uint8_t value);
+		void AND_Imm();
 
 		// Status Register (P) Functions
 		void SetCarryFlag(bool value);
@@ -97,20 +123,10 @@ namespace Emulation
 		uint16_t PullStackWord();
 
 		void Reset();
-		void Execute();
+		void Clock();
+		void InitializeOpcodes();
 
 		void PrintState();
-
-	public:
-
-		void LoadProgram(const uint8_t* program, uint16_t programSize, uint16_t loadAddress);
-		void Run();
-
-		static CPU& Instance()
-		{
-			static CPU INSTANCE;
-			return INSTANCE;
-		}
 	};
 }
 

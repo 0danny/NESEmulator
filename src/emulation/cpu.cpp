@@ -4,103 +4,75 @@ namespace Emulation
 {
     CPU::CPU()
     {
+        InitializeOpcodes();
         Reset();
     }
 
     void CPU::Reset()
     {
         A = X = Y = 0;
+
         SP = 0xFD;
         P = 0x34;
+
         PC = ReadWord(0xFFFC);  // Reset vector
+        Utils::Logger::Info("Reset Vector - ", Utils::Logger::Uint16ToHex(PC));
+
         cycles = 0;
     }
 
-    void CPU::Execute()
+    void CPU::Clock()
     {
         uint8_t opcode = Fetch();
 
         Utils::Logger::Info("OpCode - ", Utils::Logger::Uint8ToHex(opcode));
 
-        switch (opcode) 
+        if (opcodeTable[opcode] != nullptr) 
         {
-        //LDX
-        case 0xA2:
-            LDX_Imm(Fetch());
-            break;
-
-        //LDA
-        case 0xA9:
-            LDA_Imm(Fetch());
-            break;
-        case 0xAD:
-            LDA_Abs(FetchWord());
-            break;
-
-        //STX
-        case 0x8E:
-            STX_Abs(FetchWord());
-            break;
-        case 0x85:
-            STA_ZP(Fetch());
-            break;
-
-        //ADC
-        case 0x6D:
-            ADC_Abs(FetchWord());
-            break;
-
-        //BEQ
-        case 0xF0:
-            BEQ(Fetch());
-            break;
-
-        //BNE
-        case 0xD0:
-            BNE(Fetch());
-            break;
-        
-        //INX
-        case 0xE8:
-            INX();
-            break;
-
-        //BRK
-        case 0x00:
-            BRK();
-            break;
-
-        //AND
-        case 0x29:
-            AND_Imm(Fetch());
-            break;
-
-        //JSR
-        case 0x20:
-            JSR(FetchWord());
-            break;
-
-        //RTS
-        case 0x60:
-            RTS();
-            break;
-
-        //NOP
-        case 0xEA:
-            NOP();
-            break;
-
-        //JMP
-        case 0x4C:
-            JMP_Abs(FetchWord());
-            Utils::Logger::Info("Value of X - ", int(X));
-            break;
-
-        //DEFAULT
-        default:
-            Utils::Logger::Error("OpCode Not Implemented - ", Utils::Logger::Uint8ToHex(opcode));
-            break;
+            (this->*opcodeTable[opcode])();  // Call the handler
         }
+        else 
+        {
+            Utils::Logger::Error("OpCode Not Implemented, killing. - ", Utils::Logger::Uint8ToHex(opcode));
+            PrintState();
+            clocking = false;
+        }
+    }
+
+    void CPU::InitializeOpcodes() {
+        // Clear the table
+        std::fill(std::begin(opcodeTable), std::end(opcodeTable), nullptr);
+
+        // Populate the table with opcode handlers
+        opcodeTable[0xA2] = &CPU::LDX_Imm;
+        opcodeTable[0xA9] = &CPU::LDA_Imm;
+
+        opcodeTable[0xAD] = &CPU::LDA_Abs;
+
+        opcodeTable[0x8E] = &CPU::STX_Abs;
+        opcodeTable[0x85] = &CPU::STA_ZP;
+
+        opcodeTable[0x6D] = &CPU::ADC_Abs;
+
+        opcodeTable[0x29] = &CPU::AND_Imm;
+
+        opcodeTable[0x4C] = &CPU::JMP_Abs;
+
+        //Flag OpCodes
+        opcodeTable[0xD8] = &CPU::CLD;
+        opcodeTable[0x78] = &CPU::SEI;
+
+        //Branch Opcodes
+        opcodeTable[0xF0] = &CPU::BEQ;
+        opcodeTable[0xD0] = &CPU::BNE;
+        opcodeTable[0x10] = &CPU::BPL;
+
+        //Single OpCodes
+        opcodeTable[0xE8] = &CPU::INX;
+        opcodeTable[0x00] = &CPU::BRK;
+        opcodeTable[0x20] = &CPU::JSR;
+        opcodeTable[0x60] = &CPU::RTS;
+        opcodeTable[0xEA] = &CPU::NOP;
     }
 
     void CPU::Run()
@@ -109,18 +81,17 @@ namespace Emulation
 
         Utils::Logger::Info("Launching 6502 CPU...");
 
-        while (true)
+        while (clocking)
         {
-            Execute();
+            Clock();
+
+            _sleep(1000);
 
             PrintState();
-
-            //Ask for key
-            int key = _getch();
         }
     }
 
-    void CPU::LoadProgram(const uint8_t* program, uint16_t programSize, uint16_t loadAddress)
+    void CPU::LoadRawProgram(const uint8_t* program, uint16_t programSize, uint16_t loadAddress)
     {
         for (uint16_t i = 0; i < programSize; ++i)
         {
@@ -131,10 +102,46 @@ namespace Emulation
         WriteWord(0xFFFC, loadAddress);
     }
 
+    void CPU::LoadPrgProgram(const std::vector<uint8_t>& prgRom)
+    {
+        // Assume PRG ROM is always loaded at 0x8000
+        size_t prgSize = prgRom.size();
+
+        if (prgSize == 16384) // 16 KB PRG ROM
+        {
+            Utils::Logger::Info("16 KB ROM, Mirroring...");
+
+            // Load the PRG ROM into both 0x8000-0xBFFF and 0xC000-0xFFFF
+            std::copy(prgRom.begin(), prgRom.end(), memory.begin() + 0x8000);
+            std::copy(prgRom.begin(), prgRom.end(), memory.begin() + 0xC000);
+        }
+        else if (prgSize == 32768) // 32 KB PRG ROM
+        {
+            // Load the PRG ROM into 0x8000-0xFFFF
+            std::copy(prgRom.begin(), prgRom.end(), memory.begin() + 0x8000);
+
+            Utils::Logger::Info("32 KB ROM, Loading...");
+        }
+        else
+        {
+            Utils::Logger::Error("Unexpected PRG ROM size!");
+        }
+
+        //Ensure we load the correct reset vector.
+        Reset();
+
+        Utils::Logger::Info("First 30 instructions after reset:");
+        for (int i = 0; i < 30; i++) {
+            uint16_t addr = PC + i;
+            Utils::Logger::Info(Utils::Logger::Uint16ToHex(addr) + ": " + Utils::Logger::Uint8ToHex(Read(addr)));
+        }
+    }
+
     #pragma region Single OpCodes
 
     void CPU::NOP()
     {
+        cycles += 2;
         return;
     }
 
@@ -159,9 +166,11 @@ namespace Emulation
         PC = ReadWord(0xFFFE);
 
         Utils::Logger::Warning("CPU ENTERED INTERRUPT HANDLER");
+
+        cycles += 7;
     }
 
-    void CPU::JSR(uint16_t address)
+    void CPU::JSR()
     {
         //Push the return address to the stack, -1 to get the return address.
         PushStackWord(PC - 1);
@@ -169,7 +178,9 @@ namespace Emulation
         Utils::Logger::Info("Pushing PC onto stack - ", Utils::Logger::Uint16ToHex(PC - 1));
 
         //Preform normal JMP
-        JMP_Abs(address);
+        JMP_Abs();
+
+        cycles += 3; //Accounting for JMP cycles.
     }
 
     void CPU::INX()
@@ -178,21 +189,70 @@ namespace Emulation
 
         SetZeroFlag(X == 0); // Set Zero flag if X is 0
         SetNegativeFlag(X & NEGATIVE_FLAG); // Set Negative flag if bit 7 of X is set
+
+        cycles += 2;
     }
 
-    void CPU::BEQ(uint8_t offset)
+    void CPU::BEQ()
     {
+        cycles++;
+
+        int8_t operand = static_cast<int8_t>(Fetch());
+
         if (P & ZERO_FLAG)
         {
-            PC += static_cast<int8_t>(offset);
+            uint16_t oldPC = PC;
+
+            PC += operand;  // Add the signed offset to the PC
+            cycles++;
+
+            // Check if the branch crosses a page boundary
+            if ((oldPC & PAGE_NUMBER) != (PC & PAGE_NUMBER))
+            {
+                cycles++;
+            }
         }
     }
 
-    void CPU::BNE(uint8_t offset)
+    void CPU::BPL()
     {
-        if ((P & ZERO_FLAG) == false)
+        cycles++;
+
+        int8_t operand = static_cast<int8_t>(Fetch());
+
+        if (!(P & NEGATIVE_FLAG))
         {
-            PC += static_cast<int8_t>(offset);
+            uint16_t oldPC = PC;
+
+            PC += operand;  // Add the signed offset to the PC
+            cycles++;
+
+            // Check if the branch crosses a page boundary
+            if ((oldPC & PAGE_NUMBER) != (PC & PAGE_NUMBER))
+            {
+                cycles++;
+            }
+        }
+    }
+
+    void CPU::BNE()
+    {
+        cycles++;
+
+        int8_t operand = static_cast<int8_t>(Fetch());
+
+        if (!(P & ZERO_FLAG))
+        {
+            uint16_t oldPC = PC;
+
+            PC += operand;  // Add the signed offset to the PC
+            cycles++;
+
+            // Check if the branch crosses a page boundary
+            if ((oldPC & PAGE_NUMBER) != (PC & PAGE_NUMBER))
+            {
+                cycles++;
+            }
         }
     }
 
@@ -202,16 +262,18 @@ namespace Emulation
         uint16_t ret = PullStackWord();
 
         PC = ret + 1;
+
+        cycles += 6;
     }
 
     #pragma endregion
 
     #pragma region ADC
 
-    void CPU::ADC_Abs(uint16_t address)
+    void CPU::ADC_Abs()
     {
         //Adds a value from a specified memory location to the accumulator (A), along with the carry bit.
-        uint8_t value = Read(address);
+        uint8_t value = Read(FetchWord());
 
         // Perform the addition with carry
         uint16_t result = A + value + (P & CARRY_FLAG ? 1 : 0);
@@ -232,95 +294,131 @@ namespace Emulation
 
         // Store the result back in the accumulator (only the lower 8 bits)
         A = LOBYTE(result);
+
+        cycles += 4;
     }
 
     #pragma endregion
 
     #pragma region LDX
 
-    void CPU::LDX_Imm(uint8_t value)
+    void CPU::LDX_Imm()
     {
         //Loads a value directly into X
-        X = value;
+        X = Fetch();
 
         SetZeroFlag(X == 0); // Set Zero flag if X is 0
         SetNegativeFlag(X & NEGATIVE_FLAG); // Set Negative flag if bit 7 of X is set
+
+        cycles += 2;
     }
 
     #pragma endregion
 
     #pragma region LDA
 
-    void CPU::LDA_Imm(uint8_t value)
+    void CPU::LDA_Imm()
     {
         //Loads a value directly into Accumulator (A)
-        A = value;
+        A = Fetch();
 
         SetZeroFlag(A == 0); // Set Zero flag if A is 0
         SetNegativeFlag(A & NEGATIVE_FLAG); // Set Negative flag if bit 7 of A is set
+
+        cycles += 2;
     }
 
-    void CPU::LDA_Abs(uint16_t address)
+    void CPU::LDA_Abs()
     {
         //Get value from memory.
-        A = Read(address);
+        A = Read(FetchWord());
 
         SetZeroFlag(A == 0); // Set Zero flag if A is 0
         SetNegativeFlag(A & NEGATIVE_FLAG); // Set Negative flag if bit 7 of A is set
+
+        cycles += 4;
     }
 
     #pragma endregion
 
     #pragma region STX
 
-    void CPU::STX_Abs(uint16_t address)
+    void CPU::STX_Abs()
     {
         //Loads the value of the X register into memory at the address.
-        Write(address, X);
+        Write(FetchWord(), X);
+
+        cycles += 4;
     }
 
     #pragma endregion
   
     #pragma region STA
 
-    void CPU::STA_ZP(uint8_t address)
+    void CPU::STA_ZP()
     {
         //Zero page refers to the first 256 bytes of memory.
 
         //Loads the value of the A register into memory at the address.
-        Write(address, A);
+        Write(Fetch(), A);
+
+        cycles += 3;
     }
 
     #pragma endregion
 
     #pragma region AND
 
-    void CPU::AND_Imm(uint8_t value)
+    void CPU::AND_Imm()
     {
-        A = A & value; // Perform bitwise AND with the immediate value
+        A = A & Fetch(); // Perform bitwise AND with the immediate value
 
         SetZeroFlag(A == 0);  // Set the Zero flag if the result is 0
         SetNegativeFlag(A & NEGATIVE_FLAG);  // Set the Negative flag if bit 7 is set
+
+        cycles += 2;
     }
 
     #pragma endregion
 
     #pragma region JMP
 
-    void CPU::JMP_Abs(uint16_t address)
+    void CPU::JMP_Abs()
     {
         // JMP to address.
-        PC = address;
+        PC = FetchWord();
+
+        cycles += 3;
     }
 
     #pragma endregion
-  
-    void CPU::PushStack(uint8_t value) {
+    
+    #pragma region Flag OpCodes
+
+    void CPU::CLD()
+    {
+        SetDecimalFlag(false);
+
+        cycles += 2;
+    }
+
+    void CPU::SEI()
+    {
+        SetInterruptFlag(true);
+
+        cycles += 2;
+    }
+
+    #pragma endregion
+
+    void CPU::PushStack(uint8_t value) 
+    {
         Write(StackStart + SP, value);  // Store the value at the current stack pointer address
         SP--;  // Decrement the stack pointer
     }
 
-    void CPU::PushStackWord(uint16_t value) {
+    void CPU::PushStackWord(uint16_t value) 
+    {
         //We have to push the high byte first as we are growing downwards.
 
         // Push the high byte first
