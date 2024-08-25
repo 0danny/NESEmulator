@@ -32,7 +32,9 @@ namespace Emulation
 
 		void LoadRawProgram(const uint8_t* program, uint16_t programSize, uint16_t loadAddress);
 		void LoadPrgProgram(const std::vector<uint8_t>& prgRom);
-		void Run();
+		void Reset();
+		void Clock();
+		bool IsClocking();
 
 		static CPU& Instance()
 		{
@@ -122,8 +124,6 @@ namespace Emulation
 		uint8_t PullStack();
 		uint16_t PullStackWord();
 
-		void Reset();
-		void Clock();
 		void InitializeOpcodes();
 
 		void PrintState();

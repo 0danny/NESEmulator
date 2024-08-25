@@ -75,20 +75,9 @@ namespace Emulation
         opcodeTable[0xEA] = &CPU::NOP;
     }
 
-    void CPU::Run()
+    bool CPU::IsClocking()
     {
-        Reset();
-
-        Utils::Logger::Info("Launching 6502 CPU...");
-
-        while (clocking)
-        {
-            Clock();
-
-            _sleep(1000);
-
-            PrintState();
-        }
+        return clocking;
     }
 
     void CPU::LoadRawProgram(const uint8_t* program, uint16_t programSize, uint16_t loadAddress)
@@ -130,11 +119,12 @@ namespace Emulation
         //Ensure we load the correct reset vector.
         Reset();
 
+        /*
         Utils::Logger::Info("First 30 instructions after reset:");
         for (int i = 0; i < 30; i++) {
             uint16_t addr = PC + i;
             Utils::Logger::Info(Utils::Logger::Uint16ToHex(addr) + ": " + Utils::Logger::Uint8ToHex(Read(addr)));
-        }
+        }*/
     }
 
     #pragma region Single OpCodes

@@ -3,6 +3,11 @@
 #include "utils/logger.h"
 #include "emulation/cpu.h"
 #include "emulation/romreader.h"
+#include "emulation/graphics/renderer.h"
+
+#include <thread>
+#include <atomic>
+#include <chrono>
 
 namespace Core
 {
@@ -13,6 +18,7 @@ namespace Core
 
 	public:
 		int Start();
+		void RunCPU();
 
 		static Emulator& Instance()
 		{
