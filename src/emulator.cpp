@@ -4,13 +4,14 @@ namespace Core
 {
 	Emulator::Emulator() { } 
 
-	int Emulator::Start()
+	int Emulator::Start(int argc, char* argv[])
 	{
         Utils::Logger::Info("The emulator is starting...");
 
         auto& cpu = Emulation::CPU::Instance();
         auto& romReader = Emulation::RomReader::Instance();
         auto& renderer = Emulation::Graphics::Renderer::Instance();
+        auto& monitor = Monitor::Window::Instance();
 
         if (!renderer.InitSDL())
         {
@@ -19,37 +20,28 @@ namespace Core
         }
 
         // Load ROM first.
-        if (romReader.LoadRom("games/donkeykong.nes"))
+        if (romReader.LoadRom("games/donkeykongjr.nes"))
         {
+            //Show header of loaded ROM.
             romReader.PrintHeader();
+
+            //Load the rom into memory.
+            cpu.LoadPrgProgram(romReader.GetPRGRom());
+
+            //Start CPU & Renderer threads.
+            cpu.StartThread();
+            renderer.StartThread();
+
+            //Create monitor window.
+            monitor.Create(argc, argv);
+            monitor.AddControls(romReader.GetPRGRom());
+            monitor.Run();
+
+            //Cleanup
+            cpu.Cleanup();
+            renderer.Cleanup();
         }
-
-        cpu.LoadPrgProgram(romReader.GetPRGRom());
-
-        // Start CPU thread
-        std::thread cpuThread(&Emulator::RunCPU, this);
-
-        // Run renderer in main thread
-        renderer.Loop();
-
-        cpuThread.join();
-
-        renderer.Cleanup();
 
         return 0;
 	}
-
-    void Emulator::RunCPU()
-    {
-        Utils::Logger::Info("Launching 6502 CPU...");
-
-        auto& cpu = Emulation::CPU::Instance();
-
-        while (cpu.IsClocking())
-        {
-            cpu.Clock();
-
-            std::this_thread::sleep_for(std::chrono::seconds(1));
-        }
-    }
 }

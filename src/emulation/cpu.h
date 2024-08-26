@@ -30,11 +30,15 @@ namespace Emulation
 	public:
 		using OpcodeHandler = void(CPU::*)();
 
+		CPU();
+
 		void LoadRawProgram(const uint8_t* program, uint16_t programSize, uint16_t loadAddress);
 		void LoadPrgProgram(const std::vector<uint8_t>& prgRom);
 		void Reset();
 		void Clock();
-		bool IsClocking();
+		void Loop();
+		void StartThread();
+		void Cleanup();
 
 		static CPU& Instance()
 		{
@@ -46,9 +50,9 @@ namespace Emulation
 		uint8_t A = 0;   // Accumulator
 		uint8_t X = 0;   // X Register
 		uint8_t Y = 0;   // Y Register
-		uint8_t SP = 0; // Stack Pointer (Located between 0x0100 and 0x01FF) 1 byte.
+		uint8_t SP = 0;  // Stack Pointer (Located between 0x0100 and 0x01FF) 1 byte.
 		uint16_t PC = 0; // Program Counter
-		uint8_t P = 0; // Status Register
+		uint8_t P = 0;   // Status Register
 
 		uint16_t StackStart = 0x0100;
 
@@ -60,7 +64,7 @@ namespace Emulation
 
 		OpcodeHandler opcodeTable[256];
 
-		CPU();
+		std::thread cpuThread;
 
 		// Memory Functions
 		uint8_t Fetch();
@@ -84,6 +88,7 @@ namespace Emulation
 		void BRK();
 		void NOP();
 		void RTS();
+		void TXS();
 
 		//Flag OpCodes
 		void CLD();
@@ -98,7 +103,10 @@ namespace Emulation
 
 		//STX
 		void STX_Abs();
+
+		//STA
 		void STA_ZP();
+		void STA_Abs();
 
 		//ADC
 		void ADC_Abs();
@@ -120,6 +128,8 @@ namespace Emulation
 
 		void PushStack(uint8_t value);
 		void PushStackWord(uint16_t value);
+
+		void ThrowException(std::string reason, std::string error);
 
 		uint8_t PullStack();
 		uint16_t PullStackWord();

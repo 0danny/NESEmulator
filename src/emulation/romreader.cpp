@@ -25,6 +25,17 @@ namespace Emulation
 		// Get the rom name by splitting at last /
 		romName = filePath.substr(filePath.find_last_of('/', filePath.length()) + 1, filePath.length());
 
+		// Look for the enum for the mapper.
+		int mapperNum = ((header.flags7 & 0xF0) | (header.flags6 >> 4));
+
+		if (mapperNum < 0 && mapperNum > mappers->size())
+		{
+			Utils::Logger::Error("Mapper number ", mapperNum, " not supported.");
+			return false;
+		}
+
+		Utils::Logger::Info("Using memory mapper ", mappers[mapperNum]);
+
 		// Load PRG ROM data
 
 		/*
@@ -78,19 +89,19 @@ namespace Emulation
 
 	void RomReader::PrintHeader() const
 	{
-		std::cout << "----- iNES Header Information -----" << std::endl;
-		std::cout << "Rom Name: " << romName << std::endl;
-		std::cout << "Signature: " << header.signature[0] << header.signature[1] << header.signature[2] << " (0x"
-			<< std::hex << std::uppercase << int(header.signature[3]) << ")" << std::endl;
-		std::cout << "PRG ROM Size: " << std::dec << int(header.prgRomSize) << " x 16 KB" << std::endl;
-		std::cout << "CHR ROM Size: " << std::dec << int(header.chrRomSize) << " x 8 KB" << std::endl;
-		std::cout << "Mapper Number: " << ((header.flags7 & 0xF0) | (header.flags6 >> 4)) << std::endl;
-		std::cout << "Mirroring: " << ((header.flags6 & 0x01) ? "Vertical" : "Horizontal") << std::endl;
-		std::cout << "Battery-backed RAM: " << ((header.flags6 & 0x02) ? "Yes" : "No") << std::endl;
-		std::cout << "Trainer: " << ((header.flags6 & 0x04) ? "Yes" : "No") << std::endl;
-		std::cout << "Four-screen VRAM: " << ((header.flags6 & 0x08) ? "Yes" : "No") << std::endl;
-		std::cout << "PRG RAM Size: " << std::dec << int(header.prgRamSize) << " x 8 KB" << std::endl;
-		std::cout << "TV System: " << ((header.flags9 & 0x01) ? "PAL" : "NTSC") << std::endl;
-		std::cout << "-----------------------------------" << std::endl;
+		Utils::Logger::Info("----- iNES Header Information -----");
+		Utils::Logger::Info("Rom Name: ", romName);
+		Utils::Logger::Info("Signature: ", header.signature[0], header.signature[1], header.signature[2],
+			" (0x", std::hex, std::uppercase, int(header.signature[3]), ")");
+		Utils::Logger::Info("PRG ROM Size: ", std::dec, int(header.prgRomSize), " x 16 KB");
+		Utils::Logger::Info("CHR ROM Size: ", std::dec, int(header.chrRomSize), " x 8 KB");
+		Utils::Logger::Info("Mapper Number: ", ((header.flags7 & 0xF0) | (header.flags6 >> 4)));
+		Utils::Logger::Info("Mirroring: ", ((header.flags6 & 0x01) ? "Vertical" : "Horizontal"));
+		Utils::Logger::Info("Battery-backed RAM: ", ((header.flags6 & 0x02) ? "Yes" : "No"));
+		Utils::Logger::Info("Trainer: ", ((header.flags6 & 0x04) ? "Yes" : "No"));
+		Utils::Logger::Info("Four-screen VRAM: ", ((header.flags6 & 0x08) ? "Yes" : "No"));
+		Utils::Logger::Info("PRG RAM Size: ", std::dec, int(header.prgRamSize), " x 8 KB");
+		Utils::Logger::Info("TV System: ", ((header.flags9 & 0x01) ? "PAL" : "NTSC"));
+		Utils::Logger::Info("-----------------------------------");
 	}
 }

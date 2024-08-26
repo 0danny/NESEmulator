@@ -36,6 +36,14 @@ namespace Emulation::Graphics
         return true;
 	}
 
+    void Renderer::StartThread()
+    {
+        // Start CPU thread
+        rendererThread = std::thread(&Renderer::Loop, this);
+
+        Utils::Logger::Info("Renderer thread started - ", rendererThread.get_id());
+    }
+
     void Renderer::Loop()
     {
         bool quit = false;

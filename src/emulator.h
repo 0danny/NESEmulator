@@ -4,10 +4,12 @@
 #include "emulation/cpu.h"
 #include "emulation/romreader.h"
 #include "emulation/graphics/renderer.h"
+#include "monitor/window.h"
 
 #include <thread>
 #include <atomic>
 #include <chrono>
+#include <QThread>
 
 namespace Core
 {
@@ -17,8 +19,7 @@ namespace Core
 		Emulator();
 
 	public:
-		int Start();
-		void RunCPU();
+		int Start(int argc, char* argv[]);
 
 		static Emulator& Instance()
 		{

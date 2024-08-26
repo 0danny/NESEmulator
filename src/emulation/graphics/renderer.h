@@ -16,6 +16,7 @@ namespace Emulation::Graphics
 		void RenderFrame(uint32_t* pixelBuffer);
 		void Cleanup();
 		void Loop();
+		void StartThread();
 
 		static Renderer& Instance()
 		{
@@ -30,6 +31,8 @@ namespace Emulation::Graphics
 		SDL_Window* window = nullptr;
 		SDL_Renderer* renderer = nullptr;
 		SDL_Texture* texture = nullptr;
+
+		std::thread rendererThread;
 
 		uint32_t pixelBuffer[SCREEN_WIDTH * SCREEN_HEIGHT] = { 0 };
 	};

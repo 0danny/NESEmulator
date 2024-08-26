@@ -42,6 +42,10 @@ namespace Emulation
 		std::vector<uint8_t> chrRom; // CHR ROM data
 		std::string romName;
 
+		std::string mappers[1] = {
+			"NROM"
+		};
+
 		bool ReadHeader(std::ifstream& romFile);
 	};
 }
