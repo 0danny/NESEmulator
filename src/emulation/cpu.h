@@ -5,6 +5,9 @@
 #include <conio.h>
 
 #include "utils/logger.h"
+#include "utils/excepthandler.h"
+#include "emulation/graphics/ppu.h"
+#include "emulation/memorybus.h"
 
 #define LOBYTE(w)           ((uint8_t)(w))
 #define HIBYTE(w)           ((uint8_t)(((uint16_t)(w) >> 8) & 0xFF))
@@ -32,13 +35,10 @@ namespace Emulation
 
 		CPU();
 
-		void LoadRawProgram(const uint8_t* program, uint16_t programSize, uint16_t loadAddress);
-		void LoadPrgProgram(const std::vector<uint8_t>& prgRom);
 		void Reset();
 		void Clock();
-		void Loop();
-		void StartThread();
-		void Cleanup();
+
+		void RequestNMI();
 
 		static CPU& Instance()
 		{
@@ -47,6 +47,9 @@ namespace Emulation
 		}
 
 	private:
+		MemoryBus& memoryBus;
+		Utils::ExceptHandler& exceptHandler;
+
 		uint8_t A = 0;   // Accumulator
 		uint8_t X = 0;   // X Register
 		uint8_t Y = 0;   // Y Register
@@ -56,11 +59,7 @@ namespace Emulation
 
 		uint16_t StackStart = 0x0100;
 
-		std::array<uint8_t, 65536> memory = { 0 };
-
 		int cycles = 0;
-
-		bool clocking = true;
 
 		OpcodeHandler opcodeTable[256];
 
@@ -69,12 +68,6 @@ namespace Emulation
 		// Memory Functions
 		uint8_t Fetch();
 		uint16_t FetchWord();
-
-		uint8_t Read(uint16_t addr);
-		uint16_t ReadWord(uint16_t addr);
-
-		void Write(uint16_t addr, uint8_t value);
-		void WriteWord(uint16_t addr, uint16_t value);
 
 		// Op Code Implementations
 
@@ -89,6 +82,7 @@ namespace Emulation
 		void NOP();
 		void RTS();
 		void TXS();
+		void NMI();
 
 		//Flag OpCodes
 		void CLD();
@@ -129,7 +123,7 @@ namespace Emulation
 		void PushStack(uint8_t value);
 		void PushStackWord(uint16_t value);
 
-		void ThrowException(std::string reason, std::string error);
+		void ExceptionWrapper(std::string reason, std::string error);
 
 		uint8_t PullStack();
 		uint16_t PullStackWord();

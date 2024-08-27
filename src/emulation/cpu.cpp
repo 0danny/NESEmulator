@@ -2,7 +2,7 @@
 
 namespace Emulation
 {
-	CPU::CPU()
+	CPU::CPU() : memoryBus(MemoryBus::Instance()), exceptHandler(Utils::ExceptHandler::Instance())
 	{
 		InitializeOpcodes();
 		Reset();
@@ -15,7 +15,7 @@ namespace Emulation
 		SP = 0xFD;
 		P = 0x34;
 
-		PC = ReadWord(0xFFFC);  // Reset vector
+		PC = memoryBus.ReadWord(0xFFFC);  // Reset vector
 		Utils::Logger::Info("Reset Vector - ", Utils::Logger::Uint16ToHex(PC));
 
 		cycles = 0;
@@ -25,7 +25,7 @@ namespace Emulation
 	{
 		uint8_t opcode = Fetch();
 
-		Utils::Logger::Info("OpCode - ", Utils::Logger::Uint8ToHex(opcode));
+		//Utils::Logger::Info("OpCode - ", Utils::Logger::Uint8ToHex(opcode));
 
 		if (opcodeTable[opcode] != nullptr)
 		{
@@ -33,7 +33,7 @@ namespace Emulation
 		}
 		else
 		{
-			ThrowException("OpCode Not Implemented", Utils::Logger::Uint8ToHex(opcode));
+			ExceptionWrapper("OpCode Not Implemented", Utils::Logger::Uint8ToHex(opcode));
 		}
 	}
 
@@ -77,85 +77,15 @@ namespace Emulation
 		opcodeTable[0x9A] = &CPU::TXS;
 	}
 
-	void CPU::StartThread()
+	void CPU::ExceptionWrapper(std::string reason, std::string error)
 	{
-		// Start CPU thread
-		cpuThread = std::thread(&CPU::Loop, this);
-
-		Utils::Logger::Info("CPU thread started - ", cpuThread.get_id());
-	}
-
-	void CPU::Cleanup()
-	{
-		cpuThread.join();
-	}
-
-	void CPU::Loop()
-	{
-		while (clocking)
-		{
-			Clock();
-
-			std::this_thread::sleep_for(std::chrono::microseconds(16));
-		}
-	}
-
-	void CPU::LoadRawProgram(const uint8_t* program, uint16_t programSize, uint16_t loadAddress)
-	{
-		for (uint16_t i = 0; i < programSize; ++i)
-		{
-			memory[loadAddress + i] = program[i];
-		}
-
-		// Set the reset vector to point to the program's start address
-		WriteWord(0xFFFC, loadAddress);
-	}
-
-	void CPU::ThrowException(std::string reason, std::string error)
-	{
-		//Throw an exception when the CPU encouters an error.
-		Utils::Logger::Error("--------------- Encountered an Exception! ---------------");
-		Utils::Logger::Error(reason + " - ", error);
+		exceptHandler.ThrowException(reason, error);
 		PrintState();
-		Utils::Logger::Error("---------------------------------------------------------");
-
-		clocking = false;
 	}
 
-	void CPU::LoadPrgProgram(const std::vector<uint8_t>& prgRom)
+	void CPU::RequestNMI()
 	{
-		// Assume PRG ROM is always loaded at 0x8000
-		size_t prgSize = prgRom.size();
-
-		if (prgSize == 16384) // 16 KB PRG ROM
-		{
-			Utils::Logger::Info("16 KB ROM, Mirroring...");
-
-			// Load the PRG ROM into both 0x8000-0xBFFF and 0xC000-0xFFFF
-			std::copy(prgRom.begin(), prgRom.end(), memory.begin() + 0x8000);
-			std::copy(prgRom.begin(), prgRom.end(), memory.begin() + 0xC000);
-		}
-		else if (prgSize == 32768) // 32 KB PRG ROM
-		{
-			// Load the PRG ROM into 0x8000-0xFFFF
-			std::copy(prgRom.begin(), prgRom.end(), memory.begin() + 0x8000);
-
-			Utils::Logger::Info("32 KB ROM, Loading...");
-		}
-		else
-		{
-			Utils::Logger::Error("Unexpected PRG ROM size!");
-		}
-
-		//Ensure we load the correct reset vector.
-		Reset();
-
-		/*
-		Utils::Logger::Info("First 30 instructions after reset:");
-		for (int i = 0; i < 30; i++) {
-			uint16_t addr = PC + i;
-			Utils::Logger::Info(Utils::Logger::Uint16ToHex(addr) + ": " + Utils::Logger::Uint8ToHex(Read(addr)));
-		}*/
+		NMI();
 	}
 
 #pragma region Single OpCodes
@@ -164,6 +94,25 @@ namespace Emulation
 	{
 		cycles += 2;
 		return;
+	}
+
+	void CPU::NMI()
+	{
+		// Push the current PC onto the stack
+		PushStackWord(PC);
+
+		// Push the status register onto the stack
+		SetBreakFlag(false); // Clear the Break flag before pushing
+		PushStack(P);
+
+		// Disable further interrupts
+		SetInterruptFlag(true);
+
+		// Read the NMI vector (0xFFFA-0xFFFB) and jump to that address
+		PC = memoryBus.ReadWord(0xFFFA);
+
+		// The NMI takes 7 cycles to execute
+		cycles += 7;
 	}
 
 	void CPU::BRK()
@@ -184,7 +133,7 @@ namespace Emulation
 		SetInterruptFlag(true);
 
 		// Fetch the interrupt vector from $FFFE/$FFFF and set the PC
-		PC = ReadWord(0xFFFE);
+		PC = memoryBus.ReadWord(0xFFFE);
 
 		Utils::Logger::Warning("CPU ENTERED INTERRUPT HANDLER");
 
@@ -294,7 +243,7 @@ namespace Emulation
 	void CPU::ADC_Abs()
 	{
 		//Adds a value from a specified memory location to the accumulator (A), along with the carry bit.
-		uint8_t value = Read(FetchWord());
+		uint8_t value = memoryBus.Read(FetchWord());
 
 		// Perform the addition with carry
 		uint16_t result = A + value + (P & CARRY_FLAG ? 1 : 0);
@@ -352,7 +301,7 @@ namespace Emulation
 	void CPU::LDA_Abs()
 	{
 		//Get value from memory.
-		A = Read(FetchWord());
+		A = memoryBus.Read(FetchWord());
 
 		SetZeroFlag(A == 0); // Set Zero flag if A is 0
 		SetNegativeFlag(A & NEGATIVE_FLAG); // Set Negative flag if bit 7 of A is set
@@ -367,7 +316,7 @@ namespace Emulation
 	void CPU::STX_Abs()
 	{
 		//Loads the value of the X register into memory at the address.
-		Write(FetchWord(), X);
+		memoryBus.Write(FetchWord(), X);
 
 		cycles += 4;
 	}
@@ -381,7 +330,7 @@ namespace Emulation
 		//Zero page refers to the first 256 bytes of memory.
 
 		//Store the value of the A register into memory at the zero-page address.
-		Write(Fetch(), A);
+		memoryBus.Write(Fetch(), A);
 
 		cycles += 3;
 	}
@@ -389,7 +338,7 @@ namespace Emulation
 	void CPU::STA_Abs()
 	{
 		//Store the value of the A register into memory at the absolute address.
-		Write(FetchWord(), A);
+		memoryBus.Write(FetchWord(), A);
 
 		cycles += 4;
 	}
@@ -453,7 +402,7 @@ namespace Emulation
 
 	void CPU::PushStack(uint8_t value)
 	{
-		Write(StackStart + SP, value);  // Store the value at the current stack pointer address
+		memoryBus.Write(StackStart + SP, value);  // Store the value at the current stack pointer address
 		SP--;  // Decrement the stack pointer
 	}
 
@@ -471,7 +420,7 @@ namespace Emulation
 	{
 		//Read from Stack PTR
 		SP++;
-		uint8_t stValue = Read(StackStart + SP);
+		uint8_t stValue = memoryBus.Read(StackStart + SP);
 		return stValue;
 	}
 
@@ -485,78 +434,15 @@ namespace Emulation
 	// Fetch the next byte and increment the PC
 	uint8_t CPU::Fetch()
 	{
-		return memory[PC++];
+		return memoryBus.Read(PC++);
 	}
 
 	// Fetch the next word (16-bit) and increment the PC by 2 bytes
 	uint16_t CPU::FetchWord()
 	{
-		uint16_t word = memory[PC] | (memory[PC + 1] << 8);
+		uint16_t word = memoryBus.ReadWord(PC);
 		PC += 2;
 		return word;
-	}
-
-	// Read a byte from memory
-	uint8_t CPU::Read(uint16_t addr)
-	{
-		//Check if the read is inside bounds (uint cant be negative, but we check anyways lmao)
-		if (addr < 0 || addr > memory.size() - 1)
-		{
-			ThrowException("Attempted memory read outside bounds.", Utils::Logger::Uint16ToHex(addr));
-
-			return 0;
-		}
-		else
-		{
-			return memory[addr];
-		}
-	}
-
-	// Read a word (16-bit) from memory
-	uint16_t CPU::ReadWord(uint16_t addr)
-	{
-		if (addr < 0 || addr > memory.size() - 1)
-		{
-			ThrowException("Attempted memory read word outside bounds.", Utils::Logger::Uint16ToHex(addr));
-
-			return 0;
-		}
-		else
-		{
-			return memory[addr] | (memory[addr + 1] << 8);
-		}
-	}
-
-	// Write a byte to memory
-	void CPU::Write(uint16_t addr, uint8_t value)
-	{
-		// Check if the write is inside bounds
-		if (addr < 0 || addr > memory.size() - 1)
-		{
-			ThrowException("Attempted memory write outside bounds.", Utils::Logger::Uint16ToHex(addr));
-		}
-		else
-		{
-			memory[addr] = value;
-		}
-	}
-
-	// Write a word to memory
-	void CPU::WriteWord(uint16_t addr, uint16_t value)
-	{
-		// Check if the write is inside bounds
-		if (addr < 0 || addr > memory.size() - 2)  // Check if there's enough space for both bytes
-		{
-			ThrowException("Attempted memory write word outside bounds.", Utils::Logger::Uint16ToHex(addr));
-		}
-		else
-		{
-			// Write the low byte to the specified address
-			Write(addr, LOBYTE(value));
-
-			// Write the high byte to the next address
-			Write(addr + 1, HIBYTE(value));
-		}
 	}
 
 #pragma region Status Register Functions
@@ -651,12 +537,19 @@ namespace Emulation
 		Utils::Logger::Info("Cycles: ", std::dec, cycles);
 
 		// Display the top 4 bytes of the stack
-		Utils::Logger::Info("Stack (top 4 bytes):");
+		Utils::Logger::Info("Stack State: ");
 
-		for (int i = 0; i < 4; ++i) {
-			uint8_t stackValue = Read(StackStart + (SP + 1 + i));  // Corrected stack indexing
+		int count = 0;
 
-			Utils::Logger::Info("  [", Utils::Logger::Uint16ToHex(StackStart + (SP + 1 + i)), "] = ", Utils::Logger::Uint8ToHex(stackValue));
+		while (count < 4)
+		{
+			uint16_t currentAddress = (StackStart + SP) - count;
+
+			uint8_t stackValue = memoryBus.Read(currentAddress);
+
+			Utils::Logger::Info("  [", Utils::Logger::Uint16ToHex(currentAddress), "] = ", Utils::Logger::Uint8ToHex(stackValue));
+
+			count++;
 		}
 
 		Utils::Logger::Info("-------------------------------------");

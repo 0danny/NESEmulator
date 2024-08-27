@@ -59,18 +59,11 @@ namespace Emulation::Graphics
                 }
             }
 
-            for (int i = 0; i < SCREEN_WIDTH * SCREEN_HEIGHT; i++)
-            {
-                pixelBuffer[i] = 0xFF0000FF;  // Example: fill the screen with blue.
-            }
-
-            RenderFrame(pixelBuffer);
-
             SDL_Delay(16);
         }
     }
 
-    void Renderer::RenderFrame(uint32_t* pixelBuffer)
+    void Renderer::RenderFrame(const uint32_t* pixelBuffer)
     {
         void* pixels;
         int pitch;

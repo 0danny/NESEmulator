@@ -68,6 +68,11 @@ namespace Emulation
 		return prgRom;
 	}
 
+	const std::vector<uint8_t>& RomReader::GetCHRRom() const
+	{
+		return chrRom;
+	}
+
 	const iNESHeader& RomReader::GetHeader() const
 	{
 		return header;

@@ -2,16 +2,21 @@
 
 namespace Core
 {
-	Emulator::Emulator() { } 
+	Emulator::Emulator() : 
+        cpu(CPU::Instance()), 
+        romReader(RomReader::Instance()), 
+        renderer(Graphics::Renderer::Instance()), 
+        ppu(Graphics::PPU::Instance()), 
+        monitor(Monitor::Window::Instance()),
+        exceptHandler(Utils::ExceptHandler::Instance()),
+        memoryBus(MemoryBus::Instance())
+    {
+
+    } 
 
 	int Emulator::Start(int argc, char* argv[])
 	{
         Utils::Logger::Info("The emulator is starting...");
-
-        auto& cpu = Emulation::CPU::Instance();
-        auto& romReader = Emulation::RomReader::Instance();
-        auto& renderer = Emulation::Graphics::Renderer::Instance();
-        auto& monitor = Monitor::Window::Instance();
 
         if (!renderer.InitSDL())
         {
@@ -26,10 +31,13 @@ namespace Core
             romReader.PrintHeader();
 
             //Load the rom into memory.
-            cpu.LoadPrgProgram(romReader.GetPRGRom());
+            memoryBus.LoadPrgProgram(romReader.GetPRGRom());
+            cpu.Reset(); //Reset the CPU to ensure we load the correct vector.
+
+            ppu.LoadCHRProgram(romReader.GetCHRRom());
 
             //Start CPU & Renderer threads.
-            cpu.StartThread();
+            CreateClock();
             renderer.StartThread();
 
             //Create monitor window.
@@ -38,10 +46,42 @@ namespace Core
             monitor.Run();
 
             //Cleanup
-            cpu.Cleanup();
+            clockThread.join();
             renderer.Cleanup();
         }
 
         return 0;
 	}
+
+    void Emulator::CreateClock()
+    {
+        // Start Clock thread
+        clockThread = std::thread(&Emulator::Loop, this);
+
+        Utils::Logger::Info("Clock thread started - ", clockThread.get_id());
+    }
+
+    void Emulator::Loop()
+    {
+        while (!exceptHandler.HasException())
+        {
+            cpu.Clock();
+
+            // Clock the PPU three times for every CPU cycle
+            for (int i = 0; i < 3; ++i)
+            {
+                ppu.Clock();
+            }
+
+            if (ppu.IsFrameComplete())
+            {
+                renderer.RenderFrame(ppu.GetScreenBuffer());
+            }
+
+            //std::this_thread::sleep_for(std::chrono::microseconds(1));
+            //std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        }
+
+        Utils::Logger::Error("FATAL - Fell out of clock loop.");
+    }
 }

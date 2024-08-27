@@ -29,6 +29,7 @@ namespace Emulation
 		const iNESHeader& GetHeader() const;
 		void PrintHeader() const;
 		const std::vector<uint8_t>& GetPRGRom() const;
+		const std::vector<uint8_t>& GetCHRRom() const;
 
 		static RomReader& Instance()
 		{

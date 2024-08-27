@@ -13,7 +13,7 @@ namespace Emulation::Graphics
 		Renderer();
 
 		bool InitSDL();
-		void RenderFrame(uint32_t* pixelBuffer);
+		void RenderFrame(const uint32_t* pixelBuffer);
 		void Cleanup();
 		void Loop();
 		void StartThread();
