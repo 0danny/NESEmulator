@@ -15,6 +15,7 @@ namespace Emulation::Graphics
         void LoadCHRProgram(const std::vector<uint8_t>& chrRom);
         const uint32_t* GetScreenBuffer() const;
         bool IsFrameComplete();
+        void PPURegisterCallback(uint16_t address, uint16_t value, bool reading);
 
         static PPU& Instance()
         {

@@ -19,17 +19,22 @@ namespace Emulation::Graphics
         oam.fill(0);
         frameComplete = false;
 
+        memoryBus.RegisterPPURegisterCallback([this](uint16_t address, uint8_t value, bool reading) 
+        {
+            this->PPURegisterCallback(address, value, reading);
+        });
+
         Utils::Logger::Info("[PPU]: Initialized...");
     }
 
     uint8_t PPU::ReadPPURegister(uint16_t addr) const
     {
-        return memoryBus.Read(addr);
+        return memoryBus.Read(addr, false);
     }
 
     void PPU::WritePPURegister(uint16_t addr, uint8_t value)
     {
-        memoryBus.Write(addr, value);
+        memoryBus.Write(addr, value, false);
     }
 
     uint8_t PPU::ReadVRAM(uint16_t addr) const
@@ -42,6 +47,11 @@ namespace Emulation::Graphics
     {
         addr %= VRAM_SIZE;
         vram[addr] = value;
+    }
+
+    void PPU::PPURegisterCallback(uint16_t address, uint16_t value, bool reading)
+    {
+        Utils::Logger::Debug("CPU is accessing PPU at ", Utils::Logger::Uint16ToHex(address), " with value ", Utils::Logger::Uint8ToHex(value));
     }
 
     void PPU::Clock()
@@ -74,20 +84,20 @@ namespace Emulation::Graphics
         // Post-render scanline
         else if (scanline == 240)
         {
-            // Do nothing
+
         }
         // Vertical blanking lines
         else if (scanline >= 241 && scanline <= 260)
         {
             if (scanline == 241 && cycle == 1)
             {
-                Utils::Logger::Info("ENTERING VBLANK");
+                //Utils::Logger::Info("ENTERING VBLANK");
+
                 WritePPURegister(PPUSTATUS, ReadPPURegister(PPUSTATUS) | 0x80); // Set VBlank flag
 
                 if (ReadPPURegister(PPUCTRL) & 0x80)
                 {
                     auto& cpu = Emulation::CPU::Instance();
-                    Utils::Logger::Info("Triggering NMI");
                     cpu.RequestNMI();
                 }
             }
@@ -95,9 +105,10 @@ namespace Emulation::Graphics
         // Pre-render scanline
         else if (scanline == 261)
         {
+            Utils::Logger::Info("LEAVING VBLANK");
+
             if (cycle == 1)
             {
-                Utils::Logger::Info("EXITING VBLANK");
                 WritePPURegister(PPUSTATUS, ReadPPURegister(PPUSTATUS) & ~0x80); // Clear VBlank flag
             }
         }
@@ -123,16 +134,16 @@ namespace Emulation::Graphics
 
 	void PPU::IncrementVRAMAddr()
 	{
-		if (ReadPPURegister(PPUSTATUS) & 0x04)
-		{
-			// Increment by 32 if the flag is set
-			vramAddr += 32;
-		}
-		else
-		{
-			// Increment by 1 otherwise
-			vramAddr += 1;
-		}
+        if (ReadPPURegister(PPUCTRL) & 0x04)
+        {
+            // Increment by 32 if the bit is set
+            vramAddr += 32;
+        }
+        else
+        {
+            // Increment by 1 otherwise
+            vramAddr += 1;
+        }
 	}
 
     void PPU::RenderPixel()
@@ -142,22 +153,31 @@ namespace Emulation::Graphics
 
         if (x < 256 && y < 240)
         {
+            // Calculate tile and fine offsets
             uint8_t tileX = x / 8;
             uint8_t tileY = y / 8;
+            uint8_t fineX = x % 8;
+            uint8_t fineY = y % 8;
+
+            // Determine which nametable is active
             uint16_t nametableAddr = 0x2000 | (vramAddr & 0x0FFF);
             uint8_t tileIndex = ReadVRAM(nametableAddr + tileY * 32 + tileX);
 
+            // Get the pattern table base address from PPUCTRL
             uint16_t patternAddr = ((ReadPPURegister(PPUCTRL) & 0x10) ? 0x1000 : 0) + tileIndex * 16;
-            uint8_t row = y % 8;
-            uint8_t tileLow = ReadVRAM(patternAddr + row);
-            uint8_t tileHigh = ReadVRAM(patternAddr + row + 8);
 
-            uint8_t col = 7 - (x % 8);
-            uint8_t pixel = ((tileLow >> col) & 1) | (((tileHigh >> col) & 1) << 1);
+            // Fetch the two pattern table bytes
+            uint8_t tileLow = ReadVRAM(patternAddr + fineY);
+            uint8_t tileHigh = ReadVRAM(patternAddr + fineY + 8);
 
-            // For simplicity, we'll use a grayscale palette
-            uint32_t color = pixel * 85; // 0, 85, 170, or 255
-            screenBuffer[y * 256 + x] = (color << 16) | (color << 8) | color;
+            // Combine the bits to get the final color index (2-bit)
+            uint8_t pixel = ((tileLow >> (7 - fineX)) & 1) | (((tileHigh >> (7 - fineX)) & 1) << 1);
+
+            // Fetch the color from the palette
+            uint32_t color = paletteTable[pixel];
+
+            // Write to the screen buffer
+            screenBuffer[y * 256 + x] = color;
         }
     }
 

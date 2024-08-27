@@ -71,29 +71,65 @@ namespace Emulation
 
 		// Op Code Implementations
 
-		//Single Opcodes
+		//Branch OpCodes
 		void BEQ();
 		void BNE();
+		void BVS();
+		void BCC();
+		void BCS();
 		void BPL();
 
+		//Single Opcodes
 		void JSR();
 		void INX();
 		void BRK();
-		void NOP();
 		void RTS();
-		void TXS();
+		void DEC();
+		void DEY();
+		void DEX();
 		void NMI();
+
+		//NOPs
+		void NOP();
+		void NOP_Implied();
+		void NOP_Imm();
+		void NOP_ZP();
+		void NOP_ZPX();
+		void NOP_Abs();
+		void NOP_AbsX();
+
+		//ASL
+		void ASL_A();
+
+		//Bit Test
+		void BIT_Abs();
+
+		//Transfer Indexs
+		void TXS();
+		void TSX();
+		void TXA();
+		void TAX();
+		void TAY();
+		void TYA();
+
+		void LAS();
 
 		//Flag OpCodes
 		void CLD();
+		void CLC();
 		void SEI();
 
 		//LDX
 		void LDX_Imm();
+		void LDX_Abs();
 
 		//LDA
 		void LDA_Imm();
 		void LDA_Abs();
+		void LDA_ZP();
+
+		void LDY_Imm();
+		void LDY_ZP();
 
 		//STX
 		void STX_Abs();
@@ -101,12 +137,26 @@ namespace Emulation
 		//STA
 		void STA_ZP();
 		void STA_Abs();
+		void STA_AbsY();
+		void STA_AbsX();
+		void STA_IndirectY();
+
+		void STY_ZP();
 
 		//ADC
+		void ADC_Imm();
 		void ADC_Abs();
 
 		//JMP
 		void JMP_Abs();
+
+		void CMP_Imm();
+
+		// Push Stack OpCodes
+		void PHA();
+		void PHP();
+		void PLA();
+		void PLP();
 
 		//AND
 		void AND_Imm();
@@ -119,6 +169,7 @@ namespace Emulation
 		void SetBreakFlag(bool value);
 		void SetOverflowFlag(bool value);
 		void SetNegativeFlag(bool value);
+		void SetUnusedFlag(bool value);
 
 		void PushStack(uint8_t value);
 		void PushStackWord(uint16_t value);

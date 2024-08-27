@@ -73,7 +73,9 @@ namespace Core
                 ppu.Clock();
             }
 
-            if (ppu.IsFrameComplete())
+            bool hasFrame = ppu.IsFrameComplete();
+
+            if (hasFrame)
             {
                 renderer.RenderFrame(ppu.GetScreenBuffer());
             }
