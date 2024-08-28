@@ -9,14 +9,22 @@ namespace Core
         ppu(Graphics::PPU::Instance()), 
         monitor(Monitor::Window::Instance()),
         exceptHandler(Utils::ExceptHandler::Instance()),
-        memoryBus(MemoryBus::Instance())
+        memoryBus(MemoryBus::Instance()),
+        cpuTest(Testing::CPUTest::Instance())
     {
-
+        testMode = false;
     } 
 
 	int Emulator::Start(int argc, char* argv[])
 	{
         Utils::Logger::Info("The emulator is starting...");
+
+        if (testMode)
+        {
+            Utils::Logger::Info("Emulator has been started in test mode.");
+            cpuTest.StartTest();
+            return 0;
+        }
 
         if (!renderer.InitSDL())
         {
@@ -73,9 +81,7 @@ namespace Core
                 ppu.Clock();
             }
 
-            bool hasFrame = ppu.IsFrameComplete();
-
-            if (hasFrame)
+            if (ppu.IsFrameComplete())
             {
                 renderer.RenderFrame(ppu.GetScreenBuffer());
             }

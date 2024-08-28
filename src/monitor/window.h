@@ -26,19 +26,6 @@ namespace Monitor
 		void Run();
 		void AddControls(const std::vector<uint8_t>& prgRom);
 
-		static Window& Instance()
-		{
-			static Window INSTANCE;
-			return INSTANCE;
-		}
-
-	private:
-		const int WND_WIDTH = 600;
-		const int WND_HEIGHT = 500;
-
-		QApplication* app;
-		QMainWindow* mainWindow;
-
 		std::unordered_map<uint8_t, InstructionInfo> opcodeLookup = {
 			{0x00, {"BRK", 0}},
 			{0x01, {"ORA", 1}},
@@ -192,5 +179,18 @@ namespace Monitor
 			{0xFD, {"SBC", 2}},
 			{0xFE, {"INC", 2}},
 		};
+
+		static Window& Instance()
+		{
+			static Window INSTANCE;
+			return INSTANCE;
+		}
+
+	private:
+		const int WND_WIDTH = 600;
+		const int WND_HEIGHT = 500;
+
+		QApplication* app;
+		QMainWindow* mainWindow;
 	};
 }

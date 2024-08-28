@@ -13,22 +13,26 @@ namespace Emulation
 		A = X = Y = 0;
 
 		SP = 0xFD;
-		P = 0x34;
+		P = 0x24;
 
 		PC = memoryBus.ReadWord(0xFFFC);  // Reset vector
 		Utils::Logger::Info("Reset Vector - ", Utils::Logger::Uint16ToHex(PC));
 
-		cycles = 0;
+		cycles = 7;
 	}
 
 	void CPU::Clock()
 	{
 		uint8_t opcode = Fetch();
 
-		Utils::Logger::Info("OpCode - ", Utils::Logger::Uint8ToHex(opcode));
+		auto& window = Monitor::Window::Instance();
+		
+		auto& opcodeStruct = window.opcodeLookup[opcode];
 
 		if (opcodeTable[opcode] != nullptr)
 		{
+			Utils::Logger::Info("[", Utils::Logger::Uint16ToHex(PC), "] OpCode (", Utils::Logger::Uint8ToHex(opcode), ") - ", opcodeStruct.name);
+
 			(this->*opcodeTable[opcode])();  // Call the handler
 		}
 		else
@@ -47,70 +51,152 @@ namespace Emulation
 		//LDX
 		opcodeTable[0xA2] = &CPU::LDX_Imm;
 		opcodeTable[0xAE] = &CPU::LDX_Abs;
+		opcodeTable[0xA6] = &CPU::LDX_ZP;
 
 		//LDA
 		opcodeTable[0xA9] = &CPU::LDA_Imm;
 		opcodeTable[0xAD] = &CPU::LDA_Abs;
 		opcodeTable[0xA5] = &CPU::LDA_ZP;
+		opcodeTable[0xB1] = &CPU::LDA_IndirectY;
+		opcodeTable[0xA1] = &CPU::LDA_IndirectX;
 
 		//LDY
+		opcodeTable[0xAC] = &CPU::LDY_Abs;
 		opcodeTable[0xA0] = &CPU::LDY_Imm;
 		opcodeTable[0xA4] = &CPU::LDY_ZP;
 
 		opcodeTable[0xBB] = &CPU::LAS;
 
+		//STX
 		opcodeTable[0x8E] = &CPU::STX_Abs;
+		opcodeTable[0x86] = &CPU::STX_ZP;
+
+		//SLO
+		opcodeTable[0x17] = &CPU::SLO_ZPX;
 
 		//STA
 		opcodeTable[0x85] = &CPU::STA_ZP;
 		opcodeTable[0x8D] = &CPU::STA_Abs;
 		opcodeTable[0x99] = &CPU::STA_AbsY;
 		opcodeTable[0x9D] = &CPU::STA_AbsX;
-
 		opcodeTable[0x91] = &CPU::STA_IndirectY;
+		opcodeTable[0x81] = &CPU::STA_IndirectX;
 
+		opcodeTable[0x8C] = &CPU::STY_Abs;
 		opcodeTable[0x84] = &CPU::STY_ZP;
+
+		opcodeTable[0xE9] = &CPU::SBC_Imm;
+		opcodeTable[0xED] = &CPU::SBC_Abs;
+		opcodeTable[0xE1] = &CPU::SBC_IndirectX;
+		opcodeTable[0xE5] = &CPU::SBC_ZP;
 
 		//ADC
 		opcodeTable[0x6D] = &CPU::ADC_Abs;
 		opcodeTable[0x69] = &CPU::ADC_Imm;
+		opcodeTable[0x65] = &CPU::ADC_ZP;
+		opcodeTable[0x61] = &CPU::ADC_IndirectX;
 
+		//INC
+		opcodeTable[0xE6] = &CPU::INC_ZP;
+		opcodeTable[0xEE] = &CPU::INC_Abs;
+
+		//AND
 		opcodeTable[0x29] = &CPU::AND_Imm;
+		opcodeTable[0x25] = &CPU::AND_ZP;
+		opcodeTable[0x21] = &CPU::AND_IndirectX;
+		opcodeTable[0x2D] = &CPU::AND_Abs;
 
+		//JMP
 		opcodeTable[0x4C] = &CPU::JMP_Abs;
+		opcodeTable[0x6C] = &CPU::JMP_Indirect;
 
 		//ASL
 		opcodeTable[0x0A] = &CPU::ASL_A;
+		opcodeTable[0x0E] = &CPU::ASL_Abs;
+		opcodeTable[0x06] = &CPU::ASL_ZP;
+
+		//LSR
+		opcodeTable[0x4A] = &CPU::LSR_A;
+		opcodeTable[0x46] = &CPU::LSR_ZP;
+		opcodeTable[0x4E] = &CPU::LSR_Abs;
 
 		//Compare OpCodes
 		opcodeTable[0xC9] = &CPU::CMP_Imm;
+		opcodeTable[0xC5] = &CPU::CMP_ZP;
+		opcodeTable[0xCD] = &CPU::CMP_Abs;
+		opcodeTable[0xC1] = &CPU::CMP_IndirectX;
+
+		opcodeTable[0xE0] = &CPU::CPX_Imm;
+		opcodeTable[0xE4] = &CPU::CPX_ZP;
+		opcodeTable[0xEC] = &CPU::CPX_Abs;
+
+		opcodeTable[0xC0] = &CPU::CPY_Imm;
+		opcodeTable[0xC4] = &CPU::CPY_ZP;
+		opcodeTable[0xCC] = &CPU::CPY_Abs;
+
+		//EOR
+		opcodeTable[0x4D] = &CPU::EOR_Abs;
+		opcodeTable[0x49] = &CPU::EOR_Imm;
+		opcodeTable[0x41] = &CPU::EOR_IndirectX;
+		opcodeTable[0x45] = &CPU::EOR_ZP;
 
 		//Flag OpCodes
 		opcodeTable[0xD8] = &CPU::CLD;
 		opcodeTable[0x18] = &CPU::CLC;
+		opcodeTable[0xB8] = &CPU::CLV;
 		opcodeTable[0x78] = &CPU::SEI;
+		opcodeTable[0x38] = &CPU::SEC;
+		opcodeTable[0xF8] = &CPU::SED;
 
 		//Branch Opcodes
 		opcodeTable[0xF0] = &CPU::BEQ;
 		opcodeTable[0xD0] = &CPU::BNE;
 		opcodeTable[0x10] = &CPU::BPL;
 		opcodeTable[0x70] = &CPU::BVS;
+		opcodeTable[0x50] = &CPU::BVC;
 		opcodeTable[0x90] = &CPU::BCC;
 		opcodeTable[0xB0] = &CPU::BCS;
+		opcodeTable[0x30] = &CPU::BMI;
 
 		//Decrement Opcodes
-		opcodeTable[0xC6] = &CPU::DEC;
+		opcodeTable[0xC6] = &CPU::DEC_ZP;
+		opcodeTable[0xCE] = &CPU::DEC_Abs;
+
+
 		opcodeTable[0x88] = &CPU::DEY;
 		opcodeTable[0xCA] = &CPU::DEX;
 
 		//Bit Test
 		opcodeTable[0x2C] = &CPU::BIT_Abs;
+		opcodeTable[0x24] = &CPU::BIT_ZP;
+
+		//ORA
+		opcodeTable[0x0D] = &CPU::ORA_Abs;
+		opcodeTable[0x09] = &CPU::ORA_Imm;
+		opcodeTable[0x05] = &CPU::ORA_ZP;
+		opcodeTable[0x01] = &CPU::ORA_IndirectX;
+		opcodeTable[0x11] = &CPU::ORA_IndirectY;
 
 		//Single OpCodes
 		opcodeTable[0xE8] = &CPU::INX;
+		opcodeTable[0xC8] = &CPU::INY;
+
 		opcodeTable[0x00] = &CPU::BRK;
 		opcodeTable[0x20] = &CPU::JSR;
 		opcodeTable[0x60] = &CPU::RTS;
+		opcodeTable[0x40] = &CPU::RTI;
+
+		//Rotate OpCodes
+		opcodeTable[0x23] = &CPU::RLA_IndirectX;
+		opcodeTable[0x33] = &CPU::RLA_IndirectY;
+
+		opcodeTable[0x6A] = &CPU::ROR_A;
+		opcodeTable[0x66] = &CPU::ROR_ZP;
+		opcodeTable[0x6E] = &CPU::ROR_Abs;
+
+		opcodeTable[0x2A] = &CPU::ROL_A;
+		opcodeTable[0x26] = &CPU::ROL_ZP;
+		opcodeTable[0x2E] = &CPU::ROL_Abs;
 
 		//Transfer Indexs
 		opcodeTable[0xAA] = &CPU::TAX;
@@ -187,6 +273,16 @@ namespace Emulation
 		NMI();
 	}
 
+	uint8_t CPU::FetchIndirect(uint16_t& effectiveAddr, uint8_t reg)
+	{
+		uint8_t zeroPageAddr = Fetch();  // Fetch the zero-page address
+		uint8_t indexedAddr = zeroPageAddr + reg;  // Add the X register to the zero-page address (wrap-around happens naturally)
+
+		effectiveAddr = memoryBus.ReadWord(indexedAddr);  // Fetch the 16-bit address from the zero page, considering the wrap-around
+
+		return memoryBus.Read(effectiveAddr);  // Fetch the value at the effective address
+	}
+
 #pragma region Single OpCodes
 
 	void CPU::NMI()
@@ -211,7 +307,7 @@ namespace Emulation
 	void CPU::BRK()
 	{
 		// Providing an extra byte of spacing for a break mark (identifying a reason for the break.)
-		PC++;
+		PC += 2;
 
 		//Push the return address onto the stack
 		PushStackWord(PC);
@@ -228,7 +324,7 @@ namespace Emulation
 		// Fetch the interrupt vector from $FFFE/$FFFF and set the PC
 		PC = memoryBus.ReadWord(0xFFFE);
 
-		//Utils::Logger::Warning("CPU ENTERED INTERRUPT HANDLER");
+		Utils::Logger::Warning("CPU ENTERED INTERRUPT HANDLER at ", Utils::Logger::Uint16ToHex(PC));
 
 		cycles += 7;
 	}
@@ -236,9 +332,9 @@ namespace Emulation
 	void CPU::JSR()
 	{
 		//Push the return address to the stack, -1 to get the return address.
-		PushStackWord(PC - 1);
+		PushStackWord(PC + 1);
 
-		Utils::Logger::Info("Pushing PC onto stack - ", Utils::Logger::Uint16ToHex(PC - 1));
+		Utils::Logger::Info("Pushing PC onto stack - ", Utils::Logger::Uint16ToHex(PC + 1));
 
 		//Preform normal JMP
 		JMP_Abs();
@@ -252,6 +348,16 @@ namespace Emulation
 
 		SetZeroFlag(X == 0); // Set Zero flag if X is 0
 		SetNegativeFlag(X & NEGATIVE_FLAG); // Set Negative flag if bit 7 of X is set
+
+		cycles += 2;
+	}
+
+	void CPU::INY()
+	{
+		Y += 1;
+
+		SetZeroFlag(Y == 0); // Set Zero flag if X is 0
+		SetNegativeFlag(Y & NEGATIVE_FLAG); // Set Negative flag if bit 7 of X is set
 
 		cycles += 2;
 	}
@@ -289,11 +395,27 @@ namespace Emulation
 		}
 	}
 
+	void CPU::RTI()
+	{
+		// Pull the status register from the stack
+		P = PullStack();
+		SetBreakFlag(false);  // Clear the Break flag
+		SetUnusedFlag(true);  // Ensure the unused flag is always set to 1
+
+		// Pull the program counter (PC) from the stack
+		uint16_t pcLow = PullStack();
+		uint16_t pcHigh = PullStack();
+		PC = (pcHigh << 8) | pcLow;
+
+		cycles += 6;  // RTI takes 6 cycles
+	}
+
+
 #pragma endregion
 
 #pragma region Decrement
 
-	void CPU::DEC()
+	void CPU::DEC_ZP()
 	{
 		//Decrement the value at the zero page memory address.
 		uint8_t zp = Fetch();
@@ -307,6 +429,22 @@ namespace Emulation
 		SetNegativeFlag(value & NEGATIVE_FLAG);
 
 		cycles += 5;
+	}
+
+	void CPU::DEC_Abs()
+	{
+		//Decrement the value at the zero page memory address.
+		uint16_t zp = FetchWord();
+
+		uint8_t value = memoryBus.Read(zp) - 1;
+
+		memoryBus.Write(zp, value);
+
+		//Set flags
+		SetZeroFlag(value == 0);
+		SetNegativeFlag(value & NEGATIVE_FLAG);
+
+		cycles += 6;
 	}
 
 	void CPU::DEY()
@@ -335,130 +473,145 @@ namespace Emulation
 
 	void CPU::BEQ()
 	{
-		cycles++;
-
-		int8_t operand = static_cast<int8_t>(Fetch());
-
+		cycles += 2;  // Base cycles for opcode fetch and branch offset fetch
+		int8_t offset = static_cast<int8_t>(Fetch());
 		if (P & ZERO_FLAG)
 		{
 			uint16_t oldPC = PC;
-
-			PC += operand;  // Add the signed offset to the PC
-			cycles++;
-
+			PC += offset;  // Add the signed offset to the PC
 			// Check if the branch crosses a page boundary
 			if ((oldPC & PAGE_NUMBER) != (PC & PAGE_NUMBER))
 			{
-				cycles++;
+				cycles += 2;
 			}
+			else
+				cycles++;
 		}
 	}
 
 	void CPU::BPL()
 	{
-		cycles++;
-
-		int8_t operand = static_cast<int8_t>(Fetch());
-
+		cycles += 2;  // Base cycles for opcode fetch and branch offset fetch
+		int8_t offset = static_cast<int8_t>(Fetch());
 		if (!(P & NEGATIVE_FLAG))
 		{
 			uint16_t oldPC = PC;
-
-			PC += operand;  // Add the signed offset to the PC
-			cycles++;
-
+			PC += offset;  // Add the signed offset to the PC
 			// Check if the branch crosses a page boundary
 			if ((oldPC & PAGE_NUMBER) != (PC & PAGE_NUMBER))
 			{
-				cycles++;
+				cycles += 2;
 			}
+			else
+				cycles++;
 		}
 	}
 
 	void CPU::BNE()
 	{
-		cycles++;
-
-		int8_t operand = static_cast<int8_t>(Fetch());
-
+		cycles += 2;  // Base cycles for opcode fetch and branch offset fetch
+		int8_t offset = static_cast<int8_t>(Fetch());
 		if (!(P & ZERO_FLAG))
 		{
 			uint16_t oldPC = PC;
-
-			PC += operand;  // Add the signed offset to the PC
-			cycles++;
-
+			PC += offset;  // Add the signed offset to the PC
 			// Check if the branch crosses a page boundary
 			if ((oldPC & PAGE_NUMBER) != (PC & PAGE_NUMBER))
 			{
-				cycles++;
+				cycles += 2;
 			}
+			else
+				cycles++;
+		}
+	}
+
+	void CPU::BMI()
+	{
+		cycles += 2;  // Base cycles for opcode fetch and branch offset fetch
+		int8_t offset = static_cast<int8_t>(Fetch());
+		if (P & NEGATIVE_FLAG)
+		{
+			uint16_t oldPC = PC;
+			PC += offset;  // Add the signed offset to the PC
+			// Check if the branch crosses a page boundary
+			if ((oldPC & PAGE_NUMBER) != (PC & PAGE_NUMBER))
+			{
+				cycles += 2;
+			}
+			else
+				cycles++;
 		}
 	}
 
 	void CPU::BVS()
 	{
-		cycles++;
-
+		cycles += 2;  // Base cycles for opcode fetch and branch offset fetch
 		int8_t offset = static_cast<int8_t>(Fetch());
-
 		if (P & OVERFLOW_FLAG)
 		{
 			uint16_t oldPC = PC;
-
 			PC += offset;  // Add the signed offset to the PC
-			cycles++;
-
 			// Check if the branch crosses a page boundary
 			if ((oldPC & PAGE_NUMBER) != (PC & PAGE_NUMBER))
 			{
-				cycles++;
+				cycles += 2;
 			}
+			else
+				cycles++;
+		}
+	}
+
+	void CPU::BVC()
+	{
+		cycles += 2;  // Base cycles for opcode fetch and branch offset fetch
+		int8_t offset = static_cast<int8_t>(Fetch());
+		if (!(P & OVERFLOW_FLAG))
+		{
+			uint16_t oldPC = PC;
+			PC += offset;  // Add the signed offset to the PC
+			// Check if the branch crosses a page boundary
+			if ((oldPC & PAGE_NUMBER) != (PC & PAGE_NUMBER))
+			{
+				cycles += 2;
+			}
+			else
+				cycles++;
 		}
 	}
 
 	void CPU::BCC()
 	{
-		//Branch on carry clear.
-
-		cycles++;
-
+		cycles += 2;  // Base cycles for opcode fetch and branch offset fetch
 		int8_t offset = static_cast<int8_t>(Fetch());
-
 		if (!(P & CARRY_FLAG))
 		{
 			uint16_t oldPC = PC;
-
 			PC += offset;  // Add the signed offset to the PC
-			cycles++;
-
 			// Check if the branch crosses a page boundary
 			if ((oldPC & PAGE_NUMBER) != (PC & PAGE_NUMBER))
 			{
-				cycles++;
+				cycles += 2;
 			}
+			else
+				cycles++;
 		}
 	}
 
 	void CPU::BCS()
 	{
-		//Branch on carry set.
-		cycles++;
-
+		cycles += 2;  // Base cycles for opcode fetch and branch offset fetch
 		int8_t offset = static_cast<int8_t>(Fetch());
-
 		if (P & CARRY_FLAG)
 		{
 			uint16_t oldPC = PC;
-
 			PC += offset;  // Add the signed offset to the PC
-			cycles++;
-
 			// Check if the branch crosses a page boundary
 			if ((oldPC & PAGE_NUMBER) != (PC & PAGE_NUMBER))
 			{
-				cycles++;
+				cycles += 2;
 			}
+			else
+				cycles++;
 		}
 	}
 
@@ -469,7 +622,6 @@ namespace Emulation
 	void CPU::NOP()
 	{
 		cycles += 2;
-		return;
 	}
 
 	void CPU::NOP_Implied() 
@@ -509,6 +661,289 @@ namespace Emulation
 
 #pragma endregion
 
+#pragma region INC
+
+	void CPU::INC_ZP()
+	{
+		uint8_t addr = Fetch();  // Fetch the zero-page address
+		uint8_t value = memoryBus.Read(addr);  // Read the value from the zero-page address
+
+		value += 1;  // Increment the value by 1
+
+		memoryBus.Write(addr, value);  // Write the incremented value back to the zero-page address
+
+		// Set the Zero and Negative flags based on the result
+		SetZeroFlag(value == 0);
+		SetNegativeFlag(value & 0x80);
+
+		cycles += 5;  // INC zero-page takes 5 cycles
+	}
+
+	void CPU::INC_Abs()
+	{
+		uint16_t addr = FetchWord();  // Fetch the zero-page address
+		uint8_t value = memoryBus.Read(addr);  // Read the value from the zero-page address
+
+		value += 1;  // Increment the value by 1
+
+		memoryBus.Write(addr, value);  // Write the incremented value back to the zero-page address
+
+		// Set the Zero and Negative flags based on the result
+		SetZeroFlag(value == 0);
+		SetNegativeFlag(value & 0x80);
+
+		cycles += 6;  // INC zero-page takes 5 cycles
+	}
+
+
+#pragma endregion
+
+#pragma region ORA
+
+	void CPU::ORA_Imm()
+	{
+		uint8_t value = Fetch();  // Fetch the zero-page address
+
+		A |= value;  // Perform bitwise OR with the accumulator
+
+		// Set the Zero and Negative flags based on the result in the accumulator
+		SetZeroFlag(A == 0);
+		SetNegativeFlag(A & 0x80);
+
+		cycles += 2;  // ORA zero-page takes 3 cycles
+	}
+
+	void CPU::ORA_Abs()
+	{
+		uint8_t value = memoryBus.Read(FetchWord());  // Fetch the value
+
+		A |= value;  // Perform bitwise OR with the accumulator
+
+		// Set the Zero and Negative flags based on the result in the accumulator
+		SetZeroFlag(A == 0);
+		SetNegativeFlag(A & 0x80);
+
+		cycles += 4;  // ORA zero-page takes 3 cycles
+	}
+
+	void CPU::ORA_ZP()
+	{
+		uint8_t addr = Fetch();  // Fetch the zero-page address
+		uint8_t value = memoryBus.Read(addr);  // Read the value from the zero-page address
+
+		A |= value;  // Perform bitwise OR with the accumulator
+
+		// Set the Zero and Negative flags based on the result in the accumulator
+		SetZeroFlag(A == 0);
+		SetNegativeFlag(A & 0x80);
+
+		cycles += 3;  // ORA zero-page takes 3 cycles
+	}
+
+	void CPU::ORA_IndirectX()
+	{
+		uint16_t effectiveAddr;
+		uint8_t value = FetchIndirect(effectiveAddr, X);
+
+		// Perform bitwise OR with the accumulator
+		A |= value;
+
+		// Set the Zero and Negative flags based on the result in the accumulator
+		SetZeroFlag(A == 0);
+		SetNegativeFlag(A & 0x80);
+
+		cycles += 6;  // ORA (indirect, X) takes 6 cycles
+	}
+
+	void CPU::ORA_IndirectY()
+	{
+		uint8_t zeroPageAddr = Fetch();  // Fetch the zero-page address (the pointer)
+
+		// Read the base address from the zero page with manual wrapping
+		uint16_t lowByte = memoryBus.Read(zeroPageAddr);
+		uint16_t highByte = memoryBus.Read((zeroPageAddr + 1) & 0xFF);
+
+		uint16_t baseAddr = (highByte << 8) | lowByte;  // Combine high and low bytes
+		uint16_t effectiveAddr = baseAddr + Y;  // Add Y to the base address to get the effective address
+
+		uint8_t value = memoryBus.Read(effectiveAddr);  // Fetch the value at the effective address
+
+		// Perform bitwise OR with the accumulator
+		A |= value;
+
+		// Set the Zero and Negative flags based on the result in the accumulator
+		SetZeroFlag(A == 0);
+		SetNegativeFlag(A & 0x80);  // Set the Negative flag if bit 7 of the result is set
+
+		cycles += 5;  // Default cycle count
+
+		// Handle page boundary crossing
+		if ((baseAddr & 0xFF00) != (effectiveAddr & 0xFF00))
+		{
+			cycles += 1;  // Add 1 cycle if a page boundary is crossed
+		}
+	}
+
+#pragma endregion
+
+#pragma region RLA
+
+	void CPU::RLA_IndirectX()
+	{
+		uint16_t effectiveAddr;
+		uint8_t value = FetchIndirect(effectiveAddr, X);
+
+		uint8_t carryIn = (P & CARRY_FLAG) ? 1 : 0;
+		SetCarryFlag(value & 0x80);  // Set the carry flag to the high bit of the value
+		value = (value << 1) | carryIn;
+
+		memoryBus.Write(effectiveAddr, value);
+
+		A &= value;
+
+		SetZeroFlag(A == 0);
+		SetNegativeFlag(A & 0x80);
+
+		cycles += 8;
+	}
+
+	void CPU::RLA_IndirectY()
+	{
+		uint16_t effectiveAddr;
+		uint8_t value = FetchIndirect(effectiveAddr, Y);
+
+		// Perform a ROL (Rotate Left) operation on the value
+		uint8_t carryIn = (P & CARRY_FLAG) ? 1 : 0;
+		SetCarryFlag(value & 0x80);  // Set the carry flag to the high bit of the value
+		value = (value << 1) | carryIn;
+
+		// Write the rotated value back into memory
+		memoryBus.Write(effectiveAddr, value);
+
+		// Perform an AND operation between the result and the accumulator
+		A &= value;
+
+		// Set the Zero and Negative flags based on the result in the accumulator
+		SetZeroFlag(A == 0);
+		SetNegativeFlag(A & 0x80);
+
+		cycles += 8;  // RLA (indirect),Y takes 8 cycles
+	}
+
+	void CPU::ROR_A()
+	{
+		uint8_t carryIn = (P & CARRY_FLAG) ? 0x80 : 0x00;
+
+		SetCarryFlag(A & 0x01);
+
+		A = (A >> 1) | carryIn;
+
+		SetZeroFlag(A == 0);
+		SetNegativeFlag(A & 0x80);
+
+		cycles += 2;
+	}
+
+	void CPU::ROR_ZP()
+	{
+		uint8_t addr = Fetch();
+
+		uint8_t value = memoryBus.Read(addr);
+
+		uint8_t carryIn = (P & CARRY_FLAG) ? 0x80 : 0x00;
+
+		SetCarryFlag(value & 0x01);
+
+		value = (value >> 1) | carryIn;
+
+		SetZeroFlag(value == 0);
+
+		SetNegativeFlag(value & 0x80);
+
+		memoryBus.Write(addr, value);
+
+		cycles += 5;
+	}
+
+	void CPU::ROR_Abs()
+	{
+		uint16_t addr = FetchWord();
+
+		uint8_t value = memoryBus.Read(addr);
+
+		uint8_t carryIn = (P & CARRY_FLAG) ? 0x80 : 0x00;
+
+		SetCarryFlag(value & 0x01);
+
+		value = (value >> 1) | carryIn;
+
+		SetZeroFlag(value == 0);
+
+		SetNegativeFlag(value & 0x80);
+
+		memoryBus.Write(addr, value);
+
+		cycles += 6;
+	}
+
+	void CPU::ROL_ZP()
+	{
+		uint8_t addr = Fetch();
+
+		uint8_t value = memoryBus.Read(addr);
+
+		uint8_t carryIn = (P & CARRY_FLAG) ? 0x01 : 0x00;
+
+		SetCarryFlag(value & 0x80);
+
+		value = (value << 1) | carryIn;
+
+		SetZeroFlag(value == 0);
+
+		SetNegativeFlag(value & 0x80);
+
+		memoryBus.Write(addr, value);
+
+		cycles += 5;
+	}
+
+	void CPU::ROL_Abs()
+	{
+		uint16_t addr = FetchWord();
+
+		uint8_t value = memoryBus.Read(addr);
+
+		uint8_t carryIn = (P & CARRY_FLAG) ? 0x01 : 0x00;
+
+		SetCarryFlag(value & 0x80);
+
+		value = (value << 1) | carryIn;
+
+		SetZeroFlag(value == 0);
+
+		SetNegativeFlag(value & 0x80);
+
+		memoryBus.Write(addr, value);
+
+		cycles += 6;
+	}
+
+	void CPU::ROL_A()
+	{
+		uint8_t carryIn = (P & CARRY_FLAG) ? 0x01 : 0x00;
+
+		SetCarryFlag(A & NEGATIVE_FLAG);
+
+		A = (A << 1) | carryIn;
+
+		SetZeroFlag(A == 0);
+		SetNegativeFlag(A & 0x80);
+
+		cycles += 2;
+	}
+
+#pragma endregion
+
 #pragma region ASL
 
 	void CPU::ASL_A()
@@ -522,6 +957,95 @@ namespace Emulation
 
 		cycles += 2;
 	}
+
+	void CPU::ASL_Abs()
+	{
+		uint16_t addr = FetchWord();  // Fetch the 16-bit absolute address
+		uint8_t value = memoryBus.Read(addr);  // Read the value from the absolute address
+
+		// Perform an ASL (Arithmetic Shift Left) operation on the value
+		SetCarryFlag(value & 0x80);  // Set the carry flag if the high bit (bit 7) is set
+		value <<= 1;  // Shift the value left by 1
+
+		// Write the shifted value back to the absolute address
+		memoryBus.Write(addr, value);
+
+		// Set the Zero and Negative flags based on the result in the accumulator
+		SetZeroFlag(value == 0);
+		SetNegativeFlag(value & 0x80);
+
+		cycles += 6;  // ASL absolute takes 6 cycles
+	}
+
+	void CPU::ASL_ZP()
+	{
+		uint16_t addr = Fetch();
+
+		uint8_t value = memoryBus.Read(addr);
+
+		SetCarryFlag(value & 0x80);
+
+		value <<= 1;
+
+		SetZeroFlag(value == 0);
+		SetNegativeFlag(value & 0x80);
+
+		memoryBus.Write(addr, value);
+
+		cycles += 5;
+	}
+
+
+#pragma endregion
+
+#pragma region LSR
+
+	void CPU::LSR_A()
+	{
+		SetCarryFlag(A & 0x01);
+
+		A >>= 1; // Bit shift once to the right.
+
+		SetZeroFlag(A == 0);
+		SetNegativeFlag(0);
+
+		cycles += 2;
+	}
+
+	void CPU::LSR_ZP()
+	{
+		uint8_t addr = Fetch();
+		uint8_t value = memoryBus.Read(addr);
+
+		SetCarryFlag(value & 0x01);
+
+		value >>= 1;
+
+		SetZeroFlag(value == 0);
+		SetNegativeFlag(false);
+
+		memoryBus.Write(addr, value);
+
+		cycles += 5;
+	}
+
+	void CPU::LSR_Abs()
+	{
+		uint16_t addr = FetchWord();
+		uint8_t value = memoryBus.Read(addr);
+
+		SetCarryFlag(value & 0x01);
+
+		value >>= 1;
+
+		SetZeroFlag(value == 0);
+		SetNegativeFlag(false);
+
+		memoryBus.Write(addr, value);
+
+		cycles += 6;
+	}
+
 
 #pragma endregion
 
@@ -540,6 +1064,21 @@ namespace Emulation
 		SetOverflowFlag(memValue & OVERFLOW_FLAG);
 
 		cycles += 4;
+	}
+
+	void CPU::BIT_ZP()
+	{
+		uint8_t memValue = memoryBus.Read(Fetch());
+
+		//Memory AND A
+		uint8_t result = A & memValue;
+
+		//Set N & V using Bits 7 and 6
+		SetZeroFlag(result == 0);
+		SetNegativeFlag(memValue & NEGATIVE_FLAG);
+		SetOverflowFlag(memValue & OVERFLOW_FLAG);
+
+		cycles += 3;
 	}
 
 #pragma endregion
@@ -593,6 +1132,165 @@ namespace Emulation
 		cycles += 4;
 	}
 
+	void CPU::ADC_ZP()
+	{
+		uint16_t addr = Fetch();  // Fetch the zero-page address
+		uint8_t value = memoryBus.Read(addr);  // Read the value from the zero-page address
+
+		// Perform the addition with carry
+		uint16_t temp = A + value + (P & CARRY_FLAG ? 1 : 0);
+
+		// Set or clear the Carry flag
+		SetCarryFlag(temp > 0xFF);
+
+		// Set or clear the Zero flag
+		SetZeroFlag((temp & 0xFF) == 0);
+
+		// Set or clear the Overflow flag (if there was a signed overflow)
+		SetOverflowFlag((~(A ^ value) & (A ^ temp) & 0x80) != 0);
+
+		// Set or clear the Negative flag
+		SetNegativeFlag(temp & 0x80);
+
+		// Store the result back in the accumulator (only the lower 8 bits)
+		A = static_cast<uint8_t>(temp);
+
+		cycles += 3;  // ADC zero-page takes 3 cycles
+	}
+
+	void CPU::ADC_IndirectX()
+	{
+		uint8_t zeroPageAddr = Fetch();
+		uint8_t indexedAddr = zeroPageAddr + X;
+
+		uint16_t lowByte = memoryBus.Read(indexedAddr);
+		uint16_t highByte = memoryBus.Read((indexedAddr + 1) & 0xFF);
+
+		uint16_t effectiveAddr = (highByte << 8) | lowByte;
+
+		uint8_t value = memoryBus.Read(effectiveAddr);
+
+		// Perform the addition with carry
+		uint16_t temp = A + value + (P & CARRY_FLAG ? 1 : 0);
+
+		// Set or clear the Carry flag
+		SetCarryFlag(temp > 0xFF);
+
+		// Set or clear the Zero flag
+		SetZeroFlag((temp & 0xFF) == 0);
+
+		// Set or clear the Overflow flag (if there was a signed overflow)
+		SetOverflowFlag((~(A ^ value) & (A ^ temp) & 0x80) != 0);
+
+		// Set or clear the Negative flag
+		SetNegativeFlag(temp & NEGATIVE_FLAG);
+
+		// Store the result back in the accumulator (only the lower 8 bits)
+		A = static_cast<uint8_t>(temp);
+
+		cycles += 6;
+	}
+
+	void CPU::ADC_IndirectY()
+	{
+		
+	}
+
+
+
+#pragma endregion
+
+#pragma region EOR
+
+	void CPU::EOR_Imm()
+	{
+		uint8_t value = Fetch();  // Fetch the immediate
+
+		A ^= value;  // Perform exclusive OR with the accumulator
+
+		// Set the Zero and Negative flags based on the result in the accumulator
+		SetZeroFlag(A == 0);
+		SetNegativeFlag(A & NEGATIVE_FLAG);
+
+		cycles += 2;
+	}
+
+	void CPU::EOR_Abs()
+	{
+		uint16_t abs = FetchWord();  // Fetch the address
+
+		A ^= memoryBus.Read(abs);  // Perform exclusive OR with the accumulator
+
+		// Set the Zero and Negative flags based on the result in the accumulator
+		SetZeroFlag(A == 0);
+		SetNegativeFlag(A & NEGATIVE_FLAG);
+
+		cycles += 4;
+	}
+
+	void CPU::EOR_ZP()
+	{
+		uint8_t zp = Fetch();  // Fetch the zero-page address
+
+		A ^= memoryBus.Read(zp);  // Perform exclusive OR with the accumulator
+
+		// Set the Zero and Negative flags based on the result in the accumulator
+		SetZeroFlag(A == 0);
+		SetNegativeFlag(A & NEGATIVE_FLAG);
+
+		cycles += 3;
+	}
+
+	void CPU::EOR_IndirectX()
+	{
+		uint8_t zeroPageAddr = Fetch();
+		uint8_t indexedAddr = zeroPageAddr + X;
+
+		uint16_t lowByte = memoryBus.Read(indexedAddr);
+		uint16_t highByte = memoryBus.Read((indexedAddr + 1) & 0xFF);
+
+		uint16_t effectiveAddr = (highByte << 8) | lowByte;
+
+		uint8_t value = memoryBus.Read(effectiveAddr);
+
+		A ^= value;
+
+		SetZeroFlag(A == 0);
+		SetNegativeFlag(A & NEGATIVE_FLAG);
+
+		cycles += 6;
+	}
+
+#pragma endregion
+
+#pragma region SLO
+
+	void CPU::SLO_ZPX()
+	{
+		// Fetch the zero page address, then add X to it (with wrapping around)
+		uint8_t zeroPageAddr = Fetch();
+		uint8_t addr = zeroPageAddr + X;
+
+		// Read the value from the zero page address
+		uint8_t value = memoryBus.Read(addr);
+
+		// Perform an ASL (Arithmetic Shift Left) operation on the value
+		SetCarryFlag(value & 0x80);  // Set the carry flag if the high bit is set
+		value <<= 1;
+
+		// Write the shifted value back to the zero page address
+		memoryBus.Write(addr, value);
+
+		// Perform an OR operation between the shifted value and the accumulator
+		A |= value;
+
+		// Set the Zero and Negative flags based on the result in the accumulator
+		SetZeroFlag(A == 0);
+		SetNegativeFlag(A & 0x80);
+
+		cycles += 6;  // SLO (Zero Page,X) takes 6 cycles
+	}
+
 #pragma endregion
 
 #pragma region LDX
@@ -606,6 +1304,18 @@ namespace Emulation
 		SetNegativeFlag(X & NEGATIVE_FLAG); // Set Negative flag if bit 7 of X is set
 
 		cycles += 2;
+	}
+
+	void CPU::LDX_ZP()
+	{
+		uint16_t zp = Fetch();
+
+		X = memoryBus.Read(zp);
+
+		SetZeroFlag(X == 0); // Set Zero flag if X is 0
+		SetNegativeFlag(X & NEGATIVE_FLAG); // Set Negative flag if bit 7 of X is set
+
+		cycles += 3;
 	}
 
 	void CPU::LDX_Abs()
@@ -638,7 +1348,11 @@ namespace Emulation
 	void CPU::LDA_Abs()
 	{
 		//Get value from memory.
-		A = memoryBus.Read(FetchWord());
+		uint16_t address = FetchWord();
+
+		Utils::Logger::Debug("LDA ABS to address ", Utils::Logger::Uint16ToHex(address));
+
+		A = memoryBus.Read(address);
 
 		SetZeroFlag(A == 0); // Set Zero flag if A is 0
 		SetNegativeFlag(A & NEGATIVE_FLAG); // Set Negative flag if bit 7 of A is set
@@ -656,9 +1370,66 @@ namespace Emulation
 		cycles += 3;
 	}
 
+	void CPU::LDA_IndirectX()
+	{
+		uint8_t indexedAddr = Fetch() + X;
+
+		uint16_t lowByte = memoryBus.Read(indexedAddr);
+		uint16_t highByte = memoryBus.Read((indexedAddr + 1) & 0xFF);
+
+		uint16_t effectiveAddr = (highByte << 8) | lowByte;
+
+		A = memoryBus.Read(effectiveAddr);
+
+		Utils::Logger::Debug("LDA_IndirectX has loaded ", Utils::Logger::Uint8ToHex(A), " into ", Utils::Logger::Uint16ToHex(effectiveAddr));
+
+		SetZeroFlag(A == 0);
+		SetNegativeFlag(A & NEGATIVE_FLAG);  // Set the Negative flag based on the most significant bit (bit 7)
+
+		cycles += 6;  // LDA (indirect, X) takes 6 cycles
+	}
+
+	void CPU::LDA_IndirectY()
+	{
+		uint8_t zeroPageAddr = Fetch();  // Fetch the zero-page address (the pointer)
+
+		// Read the base address from the zero page with manual wrapping
+		uint16_t lowByte = memoryBus.Read(zeroPageAddr);
+		uint16_t highByte = memoryBus.Read((zeroPageAddr + 1) & 0xFF);
+
+		uint16_t baseAddr = (highByte << 8) | lowByte;  // Combine high and low bytes
+		uint16_t effectiveAddr = baseAddr + Y;  // Add Y to the base address to get the effective address
+
+		A = memoryBus.Read(effectiveAddr);  // Load the value at the effective address into A
+
+		// Set the flags
+		SetZeroFlag(A == 0);  // Set if the accumulator is zero
+		SetNegativeFlag(A & 0x80);  // Set if the high bit (bit 7) of the accumulator is set
+
+		cycles += 5;  // Default cycle count
+
+		// Handle page boundary crossing
+		if ((baseAddr & 0xFF00) != (effectiveAddr & 0xFF00))
+		{
+			cycles += 1;  // Add 1 cycle if a page boundary is crossed
+		}
+	}
+
 #pragma endregion
 
 #pragma region LDY
+
+	void CPU::LDY_Abs()
+	{
+		uint16_t address = FetchWord();
+
+		Y = memoryBus.Read(address);
+
+		SetZeroFlag(Y == 0);
+		SetNegativeFlag(Y & NEGATIVE_FLAG);
+
+		cycles += 4;
+	}
 
 	void CPU::LDY_Imm()
 	{
@@ -685,6 +1456,14 @@ namespace Emulation
 #pragma endregion
 
 #pragma region STX
+
+	void CPU::STX_ZP()
+	{
+		//Loads the value of the X register into the zero page memory address.
+		memoryBus.Write(Fetch(), X);
+
+		cycles += 3;
+	}
 
 	void CPU::STX_Abs()
 	{
@@ -718,14 +1497,22 @@ namespace Emulation
 
 	void CPU::STA_IndirectY()
 	{
-		// Read the base address from the zero-page address
-		uint16_t baseAddress = memoryBus.ReadWord(Fetch());
+		uint8_t indexedAddr = Fetch() + Y;
 
-		// Calculate the effective address by adding the Y register to the base address
-		uint16_t effectiveAddress = baseAddress + Y;
+		uint16_t effectiveAddr = memoryBus.Read(indexedAddr) | (memoryBus.Read((indexedAddr + 1) & 0xFF) << 8);
 
-		// Store the contents of the accumulator at the effective address
-		memoryBus.Write(effectiveAddress, A);
+		memoryBus.Write(effectiveAddr, A);
+
+		cycles += 6;
+	}
+
+	void CPU::STA_IndirectX()
+	{
+		uint8_t indexedAddr = Fetch() + X;
+
+		uint16_t effectiveAddr = memoryBus.Read(indexedAddr) | (memoryBus.Read((indexedAddr + 1) & 0xFF) << 8);
+
+		memoryBus.Write(effectiveAddr, A);
 
 		cycles += 6;
 	}
@@ -762,6 +1549,125 @@ namespace Emulation
 		cycles += 3;
 	}
 
+	void CPU::STY_Abs()
+	{
+		//Loads the value of the Y register into a memory address.
+		memoryBus.Write(FetchWord(), Y);
+
+		cycles += 4;
+	}
+
+#pragma endregion
+
+#pragma region SBC
+
+	void CPU::SBC_Imm()
+	{
+		uint8_t value = Fetch();  // Fetch the immediate value
+
+		// Invert the value and add it with carry
+		uint16_t result = A - value - (P & CARRY_FLAG ? 0 : 1);
+
+		// Set or clear the carry flag
+		SetCarryFlag(result <= 0xFF);
+
+		// Set or clear the zero flag
+		SetZeroFlag((result & 0xFF) == 0);
+
+		// Set or clear the overflow flag
+		bool overflow = ((A ^ result) & (A ^ value) & 0x80) != 0;
+		SetOverflowFlag(overflow);
+
+		// Set or clear the negative flag
+		SetNegativeFlag(result & 0x80);
+
+		// Store the result in the accumulator (only the lower 8 bits)
+		A = result & 0xFF;
+
+		cycles += 2;  // SBC immediate takes 2 cycles
+	}
+
+	void CPU::SBC_Abs()
+	{
+		uint8_t value = memoryBus.Read(FetchWord());  // Fetch the immediate value
+
+		// Invert the value and add it with carry
+		uint16_t result = A - value - (P & CARRY_FLAG ? 0 : 1);
+
+		// Set or clear the carry flag
+		SetCarryFlag(result <= 0xFF);
+
+		// Set or clear the zero flag
+		SetZeroFlag((result & 0xFF) == 0);
+
+		// Set or clear the overflow flag
+		bool overflow = ((A ^ result) & (A ^ value) & 0x80) != 0;
+		SetOverflowFlag(overflow);
+
+		// Set or clear the negative flag
+		SetNegativeFlag(result & 0x80);
+
+		// Store the result in the accumulator (only the lower 8 bits)
+		A = result & 0xFF;
+
+		cycles += 4;  // SBC immediate takes 2 cycles
+	}
+
+	void CPU::SBC_ZP()
+	{
+		uint8_t value = memoryBus.Read(Fetch());  // Fetch the immediate value
+
+		// Invert the value and add it with carry
+		uint16_t result = A - value - (P & CARRY_FLAG ? 0 : 1);
+
+		// Set or clear the carry flag
+		SetCarryFlag(result <= 0xFF);
+
+		// Set or clear the zero flag
+		SetZeroFlag((result & 0xFF) == 0);
+
+		// Set or clear the overflow flag
+		bool overflow = ((A ^ result) & (A ^ value) & 0x80) != 0;
+		SetOverflowFlag(overflow);
+
+		// Set or clear the negative flag
+		SetNegativeFlag(result & 0x80);
+
+		// Store the result in the accumulator (only the lower 8 bits)
+		A = result & 0xFF;
+
+		cycles += 3;  // SBC immediate takes 2 cycles
+	}
+
+	void CPU::SBC_IndirectX()
+	{
+		uint8_t zeroPageAddr = Fetch();
+		uint8_t indexedAddr = zeroPageAddr + X;
+
+		uint16_t lowByte = memoryBus.Read(indexedAddr);
+		uint16_t highByte = memoryBus.Read((indexedAddr + 1) & 0xFF);
+
+		uint16_t effectiveAddr = (highByte << 8) | lowByte;
+
+		uint8_t value = memoryBus.Read(effectiveAddr);
+
+		// Invert the value (for 2's complement subtraction)
+		value = ~value;
+
+		// Perform the addition with the inverted value and the carry flag
+		uint16_t result = A + value + (P & CARRY_FLAG ? 1 : 0);
+
+		SetCarryFlag(result > 0xFF);  // Set the carry flag based on the result (borrow is the inverse of carry in SBC)
+		SetZeroFlag((result & 0xFF) == 0);  // Set if the result is zero
+		SetOverflowFlag(((A ^ result) & (value ^ result) & 0x80) != 0);  // Set overflow flag if the sign of the result is incorrect
+		SetNegativeFlag(result & 0x80);  // Set if the result is negative
+
+		A = result & 0xFF;  // Store the result in the accumulator
+
+		cycles += 6;  // SBC (Indirect,X) takes 6 cycles
+	}
+
+
 #pragma endregion
 
 #pragma region AND
@@ -776,6 +1682,53 @@ namespace Emulation
 		cycles += 2;
 	}
 
+	void CPU::AND_ZP()
+	{
+		uint8_t addr = Fetch();  // Fetch the zero-page address
+		uint8_t value = memoryBus.Read(addr);  // Read the value from the zero-page address
+
+		// Perform bitwise AND with the accumulator
+		A &= value;
+
+		// Set the Zero and Negative flags based on the result in the accumulator
+		SetZeroFlag(A == 0);
+		SetNegativeFlag(A & NEGATIVE_FLAG);
+
+		cycles += 3;  // AND zero-page takes 3 cycles
+	}
+
+	void CPU::AND_Abs()
+	{
+		uint16_t addr = FetchWord();  // Fetch the zero-page address
+		uint8_t value = memoryBus.Read(addr);  // Read the value from the zero-page address
+
+		// Perform bitwise AND with the accumulator
+		A &= value;
+
+		// Set the Zero and Negative flags based on the result in the accumulator
+		SetZeroFlag(A == 0);
+		SetNegativeFlag(A & NEGATIVE_FLAG);
+
+		cycles += 4;
+	}
+
+	void CPU::AND_IndirectX()
+	{
+		uint8_t zeroPageAddr = Fetch();
+		uint8_t indexedAddr = zeroPageAddr + X;
+
+		uint16_t effectiveAddr = memoryBus.Read(indexedAddr) | (memoryBus.Read((indexedAddr + 1) & 0xFF) << 8);
+		uint8_t value = memoryBus.Read(effectiveAddr);
+
+		A &= value;
+
+		// Set flags
+		SetZeroFlag(A == 0);
+		SetNegativeFlag(A & NEGATIVE_FLAG);
+
+		cycles += 6;
+	}
+
 #pragma endregion
 
 #pragma region JMP
@@ -786,6 +1739,22 @@ namespace Emulation
 		PC = FetchWord();
 
 		cycles += 3;
+	}
+
+	void CPU::JMP_Indirect()
+	{
+		uint16_t indirectAddress = FetchWord();  // Fetch the 16-bit address operand
+
+		// Handle page boundary bug (NES-specific behavior)
+		uint16_t addressLow = indirectAddress;
+		uint16_t addressHigh = (indirectAddress & 0xFF00) | ((indirectAddress + 1) & 0x00FF);
+
+		// Fetch the target address by reading two bytes from the indirect address
+		uint16_t targetAddress = memoryBus.Read(addressLow) | (memoryBus.Read(addressHigh) << 8);
+
+		PC = targetAddress;  // Set the program counter to the target address
+
+		cycles += 5;  // Indirect JMP takes 5 cycles
 	}
 
 #pragma endregion
@@ -805,6 +1774,117 @@ namespace Emulation
 
 		cycles += 2;
 	}
+
+	void CPU::CMP_Abs()
+	{
+		uint16_t addr = FetchWord();  // Fetch the zero-page address
+		uint8_t value = memoryBus.Read(addr);  // Read the value from the zero-page address
+
+		uint16_t result = A - value;  // Perform the comparison
+
+		// Set the Carry flag if the accumulator is greater than or equal to the memory value
+		SetCarryFlag(A >= value);
+
+		// Set the Zero flag if the accumulator is equal to the memory value
+		SetZeroFlag((result & 0xFF) == 0);
+
+		// Set the Negative flag based on the result (if the result's most significant bit is set)
+		SetNegativeFlag(result & 0x80);
+
+		cycles += 4;  // CMP zero-page takes 3 cycles
+	}
+
+	void CPU::CMP_ZP()
+	{
+		uint8_t addr = Fetch();  // Fetch the zero-page address
+		uint8_t value = memoryBus.Read(addr);  // Read the value from the zero-page address
+
+		uint16_t result = A - value;  // Perform the comparison
+
+		// Set the Carry flag if the accumulator is greater than or equal to the memory value
+		SetCarryFlag(A >= value);
+
+		// Set the Zero flag if the accumulator is equal to the memory value
+		SetZeroFlag((result & 0xFF) == 0);
+
+		// Set the Negative flag based on the result (if the result's most significant bit is set)
+		SetNegativeFlag(result & 0x80);
+
+		cycles += 3;  // CMP zero-page takes 3 cycles
+	}
+
+	void CPU::CMP_IndirectX()
+	{
+		uint8_t zeroPageAddr = Fetch();
+		uint8_t indexedAddr = zeroPageAddr + X;
+
+		uint16_t effectiveAddr = memoryBus.Read(indexedAddr) | (memoryBus.Read((indexedAddr + 1) & 0xFF) << 8);
+		uint8_t value = memoryBus.Read(effectiveAddr);
+
+		uint16_t result = A - value;  // Perform the comparison
+
+		SetCarryFlag(A >= value);
+		SetZeroFlag((result & 0xFF) == 0);
+		SetNegativeFlag(result & NEGATIVE_FLAG);
+
+		cycles += 6;
+	}
+
+	void CPU::CPX_Imm()
+	{
+		uint8_t operand = Fetch();  // Fetch the immediate value
+		CompareOp(operand, X);
+		cycles += 2;  // CPX immediate takes 2 cycles
+	}
+
+	void CPU::CPX_ZP()
+	{
+		uint16_t address = Fetch();  // Fetch the zero-page address
+		uint8_t operand = memoryBus.Read(address);
+		CompareOp(operand, X);
+		cycles += 3;  // CPX zero-page takes 3 cycles
+	}
+
+	void CPU::CPX_Abs()
+	{
+		uint16_t address = FetchWord();  // Fetch the absolute address
+		uint8_t operand = memoryBus.Read(address);
+		CompareOp(operand, X);
+		cycles += 4;  // CPX absolute takes 4 cycles
+	}
+
+	void CPU::CPY_Imm()
+	{
+		uint8_t operand = Fetch();  // Fetch the immediate value
+		CompareOp(operand, Y);
+		cycles += 2;  // CPY immediate takes 2 cycles
+	}
+
+	void CPU::CPY_ZP()
+	{
+		uint16_t address = Fetch();  // Fetch the zero-page address
+		uint8_t operand = memoryBus.Read(address);
+		CompareOp(operand, Y);
+		cycles += 3;  // CPY zero-page takes 3 cycles
+	}
+
+	void CPU::CPY_Abs()
+	{
+		uint16_t address = FetchWord();  // Fetch the absolute address
+		uint8_t operand = memoryBus.Read(address);
+		CompareOp(operand, Y);
+		cycles += 4;  // CPY absolute takes 4 cycles
+	}
+
+	void CPU::CompareOp(uint8_t operand, uint8_t reg)
+	{
+		uint16_t result = reg - operand;
+
+		SetCarryFlag(reg >= operand);       // Set if X >= operand
+		SetZeroFlag((result & 0xFF) == 0); // Set if result is zero
+		SetNegativeFlag(result & 0x80);   // Set if bit 7 of result is set (negative)
+	}
+
 
 #pragma endregion
 
@@ -923,6 +2003,13 @@ namespace Emulation
 		cycles += 2;
 	}
 
+	void CPU::SED()
+	{
+		SetDecimalFlag(true);
+
+		cycles += 2;
+	}
+
 	void CPU::SEI()
 	{
 		SetInterruptFlag(true);
@@ -933,6 +2020,20 @@ namespace Emulation
 	void CPU::CLC()
 	{
 		SetCarryFlag(false);
+
+		cycles += 2;
+	}
+
+	void CPU::SEC()
+	{
+		SetCarryFlag(true);
+
+		cycles += 2;
+	}
+
+	void CPU::CLV()
+	{
+		SetOverflowFlag(false);
 
 		cycles += 2;
 	}

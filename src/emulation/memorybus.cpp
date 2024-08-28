@@ -86,6 +86,7 @@ namespace Emulation
 			ram[address + 1] = (value >> 8) & 0xFF;
 		}
 	}
+
 	void MemoryBus::LoadRawProgram(const uint8_t* program, uint16_t programSize, uint16_t loadAddress)
 	{
 		for (uint16_t i = 0; i < programSize; ++i)

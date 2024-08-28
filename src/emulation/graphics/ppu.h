@@ -30,15 +30,16 @@ namespace Emulation::Graphics
         // PPU memory (VRAM)
         std::array<uint8_t, VRAM_SIZE> vram;
         std::array<uint8_t, 32> paletteTable;
-        std::array<uint8_t, 0x100> palette;
+        std::array<uint8_t, 256> palette;
         std::array<uint8_t, 256> oam;
         std::array<uint32_t, 256 * 240> screenBuffer;
 
         // Internal state variables
         uint16_t vramAddr;
         uint16_t tempAddr;
+        uint16_t backgroundPatternTableAddr;
         uint8_t fineX;
-        uint8_t writeToggle;
+        bool writeToggle;
         uint8_t buffer;
         int scanline;
         int cycle;
