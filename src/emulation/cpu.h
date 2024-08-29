@@ -32,8 +32,6 @@ namespace Emulation
 	class CPU
 	{
 	public:
-		using OpcodeHandler = void(CPU::*)();
-
 		CPU();
 
 		void Reset();
@@ -60,9 +58,24 @@ namespace Emulation
 
 		uint16_t StackStart = 0x0100;
 
-		OpcodeHandler opcodeTable[256];
+		enum class AddressingMode 
+		{
+			Implied,
+			Accumulator,
+			Immediate,
+			ZeroPage,
+			ZeroPageX,
+			ZeroPageY,
+			Absolute,
+			AbsoluteX,
+			AbsoluteY,
+			Indirect,
+			IndirectX,
+			IndirectY
+		};
 
-		std::thread cpuThread;
+		// Opcode table
+		std::array<std::function<void()>, 256> opcodeTable;
 
 		// Memory Functions
 		uint8_t Fetch();
@@ -70,51 +83,23 @@ namespace Emulation
 
 		uint8_t FetchIndirect(uint16_t& effectiveAddr, uint8_t reg);
 
-		// Op Code Implementations
+		//Op Code Implementations
 
-		//Branch OpCodes
-		void BEQ();
-		void BNE();
-		void BMI();
-		void BVS();
-		void BVC();
-		void BCC();
-		void BCS();
-		void BPL();
-
-		//Single Opcodes
-		void JSR();
+		//Increment
 		void INX();
 		void INY();
-		void BRK();
-		void RTS();
+
+		//Decrement OpCodes
 		void DEY();
 		void DEX();
-		void NMI();
-
-		//Dec
 		void DEC_ZP();
 		void DEC_Abs();
-
-		//NOPs
-		void NOP();
-		void NOP_Implied();
-		void NOP_Imm();
-		void NOP_ZP();
-		void NOP_ZPX();
-		void NOP_Abs();
-		void NOP_AbsX();
-
-		void INC_ZP();
-
-		void INC_Abs();
 
 		//ORA
 		void ORA_Imm();
 		void ORA_Abs();
 		void ORA_ZP();
 		void ORA_IndirectX();
-
 		void ORA_IndirectY();
 
 		//RLA
@@ -131,18 +116,12 @@ namespace Emulation
 		//ASL
 		void ASL_A();
 		void ASL_Abs();
-
 		void ASL_ZP();
 
 		//LSR
 		void LSR_A();
 		void LSR_ZP();
-
 		void LSR_Abs();
-
-		//Bit Test
-		void BIT_Abs();
-		void BIT_ZP();
 
 		//Transfer Indexs
 		void TXS();
@@ -152,89 +131,11 @@ namespace Emulation
 		void TAY();
 		void TYA();
 
-		void LAS();
-
-		void RTI();
-
-		//Flag OpCodes
-		void CLD();
-		void SED();
-		void CLC();
-		void SEC();
-		void CLV();
-		void SEI();
-
-		//LDX
-		void LDX_Imm();
-		void LDX_ZP();
-		void LDX_Abs();
-
-		//LDA
-		void LDA_Imm();
-		void LDA_Abs();
-		void LDA_ZP();
-		void LDA_IndirectX();
-		void LDA_IndirectY();
-
-		//LDY
-		void LDY_Imm();
-		void LDY_ZP();
-		void LDY_Abs();
-
-		//STX
-		void STX_Abs();
-		void STX_ZP();
-
-		//STA
-		void STA_ZP();
-		void STA_Abs();
-		void STA_AbsY();
-		void STA_AbsX();
-		void STA_IndirectY();
-		void STA_IndirectX();
-
-		//STY
-		void STY_ZP();
-		void STY_Abs();
-
-		//SBC
-		void SBC_Imm();
-		void SBC_Abs();
-		void SBC_ZP();
-		void SBC_IndirectX();
-
-		//ADC
-		void ADC_Imm();
-		void ADC_Abs();
-		void ADC_ZP();
-		void ADC_IndirectX();
-		void ADC_IndirectY();
-
 		//EOR
 		void EOR_Imm();
 		void EOR_Abs();
 		void EOR_ZP();
 		void EOR_IndirectX();
-
-		void SLO_ZPX();
-
-		//JMP
-		void JMP_Abs();
-		void JMP_Indirect();
-
-		//CMP
-		void CMP_Imm();
-		void CMP_Abs();
-		void CMP_ZP();
-		void CMP_IndirectX();
-		void CPX_Imm();
-		void CPX_ZP();
-		void CPX_Abs();
-		void CPY_Imm();
-		void CPY_ZP();
-		void CPY_Abs();
-
-		void CompareOp(uint8_t operand, uint8_t reg);
 
 		// Push Stack OpCodes
 		void PHA();
@@ -242,11 +143,29 @@ namespace Emulation
 		void PLA();
 		void PLP();
 
-		//AND
-		void AND_Imm();
-		void AND_ZP();
-		void AND_Abs();
-		void AND_IndirectX();
+		//Interrupt/Return Addy OpCodes
+		void RTS();
+		void RTI();
+		void BRK();
+		void NMI();
+		void JSR();
+
+		//Instruction Operations
+		void LD(AddressingMode mode, uint8_t& reg, int cycles);
+		void ST(AddressingMode mode, uint8_t& reg, int cycles);
+		void CMP(AddressingMode mode, uint8_t& reg, int cycles);
+		void ADC_SBC(AddressingMode mode, int cycles, bool isSubtraction);
+		void AND(AddressingMode mode, int cycles);
+		void NOP(AddressingMode mode, int cycles);
+		void INC(AddressingMode mode, int cycles);
+		void JMP(AddressingMode mode);
+		void Branch(bool condition);
+		void BIT(AddressingMode mode, int cycles);
+		void FlagOperation(uint8_t flag, bool setFlag);
+
+		//Illegal OpCodes (Unused)
+		void SLO_ZPX();
+		void LAS();
 
 		// Status Register (P) Functions
 		void SetCarryFlag(bool value);
@@ -267,6 +186,7 @@ namespace Emulation
 		uint16_t PullStackWord();
 
 		void InitializeOpcodes();
+		uint16_t GetOperandAddress(AddressingMode mode, bool* pageBoundaryCrossed);
 
 		void PrintState();
 	};
