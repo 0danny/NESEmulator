@@ -107,6 +107,8 @@ namespace Emulation::Testing
 
     void CPUTest::TestStates(const std::vector<CPUState>& expectedStates) 
     {
+        bool problem = false;
+
         for (const auto& expectedState : expectedStates) 
         {
             if (!exceptHandler.HasException())
@@ -176,6 +178,8 @@ namespace Emulation::Testing
                         << " P:" << static_cast<int>(cpu.P)
                         << " SP:" << static_cast<int>(cpu.SP)
                         << " CYC:" << cpu.cycles << std::endl;
+                    problem = true;
+
                     break;
                 }
 
@@ -185,8 +189,12 @@ namespace Emulation::Testing
             else
             {
                 Utils::Logger::Error("Exception in testing loop.");
+                problem = true;
                 break;
             }
         }
+
+        if(!problem)
+            Utils::Logger::Info("CONGRATS, YOU HAVE PASSED NESTEST!!!!!");
     }
 }

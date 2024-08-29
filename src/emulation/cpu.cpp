@@ -105,8 +105,9 @@ namespace Emulation
 		//AND
 		opcodeTable[0x29] = [this]() { AND(AddressingMode::Immediate, 2); };
 		opcodeTable[0x25] = [this]() { AND(AddressingMode::ZeroPage, 3); };
-		opcodeTable[0x21] = [this]() { AND(AddressingMode::IndirectX, 6); };
 		opcodeTable[0x2D] = [this]() { AND(AddressingMode::Absolute, 4); };
+		opcodeTable[0x21] = [this]() { AND(AddressingMode::IndirectX, 6); };
+		opcodeTable[0x31] = [this]() { AND(AddressingMode::IndirectY, 5); };
 
 		//Return Address/Interrupt OpCodes
 		opcodeTable[0x00] = [this]() { BRK(); };
@@ -273,10 +274,6 @@ namespace Emulation
 
 	uint16_t CPU::GetOperandAddress(AddressingMode mode, bool* pageBoundaryCrossed = nullptr)
 	{
-		// TODO: FIX THIS
-		// Lets just pray that we never call an addressing mode that requires boundary checks
-		// With nullptr as the param value
-
 		switch (mode)
 		{
 		case AddressingMode::Implied:
@@ -301,14 +298,16 @@ namespace Emulation
 		case AddressingMode::AbsoluteX: {
 			uint16_t base = FetchWord();
 			uint16_t effective = base + X;
-			*pageBoundaryCrossed = (base & PAGE_NUMBER) != (effective & PAGE_NUMBER);
+			if (pageBoundaryCrossed != nullptr)
+				*pageBoundaryCrossed = (base & PAGE_NUMBER) != (effective & PAGE_NUMBER);
 			return effective;
 		}
 
 		case AddressingMode::AbsoluteY: {
 			uint16_t base = FetchWord();
 			uint16_t effective = base + Y;
-			*pageBoundaryCrossed = (base & PAGE_NUMBER) != (effective & PAGE_NUMBER);
+			if (pageBoundaryCrossed != nullptr)
+				*pageBoundaryCrossed = (base & PAGE_NUMBER) != (effective & PAGE_NUMBER);
 			return effective;
 		}
 
@@ -329,7 +328,8 @@ namespace Emulation
 			uint8_t zp = Fetch();
 			uint16_t base = memoryBus.Read(zp) | (memoryBus.Read((zp + 1) & 0xFF) << 8);
 			uint16_t effective = base + Y;
-			*pageBoundaryCrossed = (base & PAGE_NUMBER) != (effective & PAGE_NUMBER);
+			if(pageBoundaryCrossed != nullptr)
+				*pageBoundaryCrossed = (base & PAGE_NUMBER) != (effective & PAGE_NUMBER);
 			return effective;
 		}
 

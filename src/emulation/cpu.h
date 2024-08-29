@@ -131,17 +131,15 @@ namespace Emulation
 
 		void PushStack(uint8_t value);
 		void PushStackWord(uint16_t value);
-
-		void ExceptionWrapper(std::string reason, std::string error);
-
 		uint8_t PullStack();
 		uint16_t PullStackWord();
 
+		void ExceptionWrapper(std::string reason, std::string error);
 		void InitializeOpcodes();
 		void CountOpCodes();
-		uint16_t GetOperandAddress(AddressingMode mode, bool* pageBoundaryCrossed);
-
 		void PrintState();
+
+		uint16_t GetOperandAddress(AddressingMode mode, bool* pageBoundaryCrossed);
 	};
 }
 
