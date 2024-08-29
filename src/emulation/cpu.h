@@ -81,62 +81,6 @@ namespace Emulation
 		uint8_t Fetch();
 		uint16_t FetchWord();
 
-		uint8_t FetchIndirect(uint16_t& effectiveAddr, uint8_t reg);
-
-		//Op Code Implementations
-
-		//Increment
-		void INX();
-		void INY();
-
-		//Decrement OpCodes
-		void DEY();
-		void DEX();
-		void DEC_ZP();
-		void DEC_Abs();
-
-		//ORA
-		void ORA_Imm();
-		void ORA_Abs();
-		void ORA_ZP();
-		void ORA_IndirectX();
-		void ORA_IndirectY();
-
-		//RLA
-		void RLA_IndirectX();
-		void RLA_IndirectY();
-
-		void ROR_A();
-		void ROR_ZP();
-		void ROR_Abs();
-		void ROL_ZP();
-		void ROL_Abs();
-		void ROL_A();
-
-		//ASL
-		void ASL_A();
-		void ASL_Abs();
-		void ASL_ZP();
-
-		//LSR
-		void LSR_A();
-		void LSR_ZP();
-		void LSR_Abs();
-
-		//Transfer Indexs
-		void TXS();
-		void TSX();
-		void TXA();
-		void TAX();
-		void TAY();
-		void TYA();
-
-		//EOR
-		void EOR_Imm();
-		void EOR_Abs();
-		void EOR_ZP();
-		void EOR_IndirectX();
-
 		// Push Stack OpCodes
 		void PHA();
 		void PHP();
@@ -158,10 +102,18 @@ namespace Emulation
 		void AND(AddressingMode mode, int cycles);
 		void NOP(AddressingMode mode, int cycles);
 		void INC(AddressingMode mode, int cycles);
+		void ORA(AddressingMode mode, int cycles);
+		void RLA(AddressingMode mode, int cycles);
 		void JMP(AddressingMode mode);
 		void Branch(bool condition);
 		void BIT(AddressingMode mode, int cycles);
+		void EOR(AddressingMode mode, int cycles);
 		void FlagOperation(uint8_t flag, bool setFlag);
+		void Transfer(uint8_t& dest, uint8_t& src, bool setFlags);
+		void RementMemory(AddressingMode mode, bool increment, int cycles);
+		void RementRegister(uint8_t& reg, bool increment);
+		void Rotate(AddressingMode mode, bool rotateLeft, int cycles);
+		void Shift(AddressingMode mode, bool shiftLeft, int cycles);
 
 		//Illegal OpCodes (Unused)
 		void SLO_ZPX();
@@ -186,6 +138,7 @@ namespace Emulation
 		uint16_t PullStackWord();
 
 		void InitializeOpcodes();
+		void CountOpCodes();
 		uint16_t GetOperandAddress(AddressingMode mode, bool* pageBoundaryCrossed);
 
 		void PrintState();
