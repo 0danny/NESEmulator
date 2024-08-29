@@ -12,7 +12,7 @@ namespace Core
         memoryBus(MemoryBus::Instance()),
         cpuTest(Testing::CPUTest::Instance())
     {
-        testMode = true;
+        testMode = false;
     } 
 
 	int Emulator::Start(int argc, char* argv[])

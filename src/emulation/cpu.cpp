@@ -32,7 +32,7 @@ namespace Emulation
 
 		if (executeInstruction)
 		{
-			Utils::Logger::Info("[", Utils::Logger::Uint16ToHex(PC), "] OpCode (", Utils::Logger::Uint8ToHex(opcode), ") - ", opcodeStruct.name);
+			Utils::Logger::Info("[", Utils::Logger::Uint16ToHex(PC), "] OpCode (", Utils::Logger::Uint8ToHex(opcode), ")");
 
 			executeInstruction();
 		}
@@ -56,26 +56,35 @@ namespace Emulation
 		//LDX
 		opcodeTable[0xA2] = [this]() { LD(AddressingMode::Immediate, X, 2); };
 		opcodeTable[0xA6] = [this]() { LD(AddressingMode::ZeroPage, X, 3); };
+		opcodeTable[0xB6] = [this]() { LD(AddressingMode::ZeroPageY, X, 4); };
 		opcodeTable[0xAE] = [this]() { LD(AddressingMode::Absolute, X, 4); };
+		opcodeTable[0xBE] = [this]() { LD(AddressingMode::AbsoluteY, X, 4); };
 
 		//LDA
 		opcodeTable[0xA9] = [this]() { LD(AddressingMode::Immediate, A, 2); };
 		opcodeTable[0xA5] = [this]() { LD(AddressingMode::ZeroPage, A, 3); };
+		opcodeTable[0xB5] = [this]() { LD(AddressingMode::ZeroPageX, A, 4); };
 		opcodeTable[0xAD] = [this]() { LD(AddressingMode::Absolute, A, 4); };
+		opcodeTable[0xBD] = [this]() { LD(AddressingMode::AbsoluteX, A, 4); };
+		opcodeTable[0xB9] = [this]() { LD(AddressingMode::AbsoluteY, A, 4); };
 		opcodeTable[0xA1] = [this]() { LD(AddressingMode::IndirectX, A, 6); };
 		opcodeTable[0xB1] = [this]() { LD(AddressingMode::IndirectY, A, 5); };
 
 		//LDY
 		opcodeTable[0xA0] = [this]() { LD(AddressingMode::Immediate, Y, 2); };
-		opcodeTable[0xAC] = [this]() { LD(AddressingMode::Absolute, Y, 4); };
 		opcodeTable[0xA4] = [this]() { LD(AddressingMode::ZeroPage, Y, 3); };
+		opcodeTable[0xB4] = [this]() { LD(AddressingMode::ZeroPageX, Y, 4); };
+		opcodeTable[0xAC] = [this]() { LD(AddressingMode::Absolute, Y, 4); };
+		opcodeTable[0xBC] = [this]() { LD(AddressingMode::AbsoluteX, Y, 4); };
 
 		//STX
 		opcodeTable[0x8E] = [this]() { ST(AddressingMode::Absolute, X, 4); };
 		opcodeTable[0x86] = [this]() { ST(AddressingMode::ZeroPage, X, 3); };
+		opcodeTable[0x96] = [this]() { ST(AddressingMode::ZeroPageY, X, 4); };
 
 		//STA
 		opcodeTable[0x85] = [this]() { ST(AddressingMode::ZeroPage, A, 3); };
+		opcodeTable[0x95] = [this]() { ST(AddressingMode::ZeroPageX, A, 4); };
 		opcodeTable[0x8D] = [this]() { ST(AddressingMode::Absolute, A, 4); };
 		opcodeTable[0x9D] = [this]() { ST(AddressingMode::AbsoluteX, A, 5); };
 		opcodeTable[0x99] = [this]() { ST(AddressingMode::AbsoluteY, A, 5); };
@@ -85,27 +94,41 @@ namespace Emulation
 		//STY
 		opcodeTable[0x8C] = [this]() { ST(AddressingMode::Absolute, Y, 4); };
 		opcodeTable[0x84] = [this]() { ST(AddressingMode::ZeroPage, Y, 3); };
+		opcodeTable[0x94] = [this]() { ST(AddressingMode::ZeroPageX, Y, 4); };
 
 		//SBC
 		opcodeTable[0xE9] = [this]() { ADC_SBC(AddressingMode::Immediate, 2, true); };
-		opcodeTable[0xED] = [this]() { ADC_SBC(AddressingMode::Absolute, 4, true); };
-		opcodeTable[0xE1] = [this]() { ADC_SBC(AddressingMode::IndirectX, 6, true); };
 		opcodeTable[0xE5] = [this]() { ADC_SBC(AddressingMode::ZeroPage, 3, true); };
+		opcodeTable[0xF5] = [this]() { ADC_SBC(AddressingMode::ZeroPageX, 4, true); };
+		opcodeTable[0xED] = [this]() { ADC_SBC(AddressingMode::Absolute, 4, true); };
+		opcodeTable[0xFD] = [this]() { ADC_SBC(AddressingMode::AbsoluteX, 4, true); };
+		opcodeTable[0xF9] = [this]() { ADC_SBC(AddressingMode::AbsoluteY, 4, true); };
+		opcodeTable[0xE1] = [this]() { ADC_SBC(AddressingMode::IndirectX, 6, true); };
+		opcodeTable[0xF1] = [this]() { ADC_SBC(AddressingMode::IndirectY, 5, true); };
 
 		//ADC
-		opcodeTable[0x6D] = [this]() { ADC_SBC(AddressingMode::Absolute, 4, false); };
 		opcodeTable[0x69] = [this]() { ADC_SBC(AddressingMode::Immediate, 2, false); };
 		opcodeTable[0x65] = [this]() { ADC_SBC(AddressingMode::ZeroPage, 3, false); };
+		opcodeTable[0x75] = [this]() { ADC_SBC(AddressingMode::ZeroPageX, 4, false); };
+		opcodeTable[0x6D] = [this]() { ADC_SBC(AddressingMode::Absolute, 4, false); };
+		opcodeTable[0x7D] = [this]() { ADC_SBC(AddressingMode::AbsoluteX, 4, false); };
+		opcodeTable[0x79] = [this]() { ADC_SBC(AddressingMode::AbsoluteY, 4, false); };
 		opcodeTable[0x61] = [this]() { ADC_SBC(AddressingMode::IndirectX, 6, false); };
+		opcodeTable[0x71] = [this]() { ADC_SBC(AddressingMode::IndirectY, 5, false); };
 
 		//INC
 		opcodeTable[0xE6] = [this]() { INC(AddressingMode::ZeroPage, 5); };
+		opcodeTable[0xF6] = [this]() { INC(AddressingMode::ZeroPageX, 6); };
 		opcodeTable[0xEE] = [this]() { INC(AddressingMode::Absolute, 6); };
+		opcodeTable[0xFE] = [this]() { INC(AddressingMode::AbsoluteX, 7); };
 
 		//AND
 		opcodeTable[0x29] = [this]() { AND(AddressingMode::Immediate, 2); };
 		opcodeTable[0x25] = [this]() { AND(AddressingMode::ZeroPage, 3); };
+		opcodeTable[0x35] = [this]() { AND(AddressingMode::ZeroPageX, 4); };
 		opcodeTable[0x2D] = [this]() { AND(AddressingMode::Absolute, 4); };
+		opcodeTable[0x3D] = [this]() { AND(AddressingMode::AbsoluteX, 4); };
+		opcodeTable[0x39] = [this]() { AND(AddressingMode::AbsoluteY, 4); };
 		opcodeTable[0x21] = [this]() { AND(AddressingMode::IndirectX, 6); };
 		opcodeTable[0x31] = [this]() { AND(AddressingMode::IndirectY, 5); };
 
@@ -118,8 +141,12 @@ namespace Emulation
 		//Compare OpCodes
 		opcodeTable[0xC9] = [this]() { CMP(AddressingMode::Immediate, A, 2); };
 		opcodeTable[0xC5] = [this]() { CMP(AddressingMode::ZeroPage, A, 3); };
+		opcodeTable[0xD5] = [this]() { CMP(AddressingMode::ZeroPageX, A, 4); };
 		opcodeTable[0xCD] = [this]() { CMP(AddressingMode::Absolute, A, 4); };
+		opcodeTable[0xDD] = [this]() { CMP(AddressingMode::AbsoluteX, A, 4); };
+		opcodeTable[0xD9] = [this]() { CMP(AddressingMode::AbsoluteY, A, 4); };
 		opcodeTable[0xC1] = [this]() { CMP(AddressingMode::IndirectX, A, 6); };
+		opcodeTable[0xD1] = [this]() { CMP(AddressingMode::IndirectY, A, 5); };
 
 		opcodeTable[0xE0] = [this]() { CMP(AddressingMode::Immediate, X, 2); };
 		opcodeTable[0xE4] = [this]() { CMP(AddressingMode::ZeroPage, X, 3); };
@@ -162,17 +189,24 @@ namespace Emulation
 		opcodeTable[0x28] = [this]() { PLP(); };
 
 		//ORA
-		opcodeTable[0x0D] = [this]() { ORA(AddressingMode::Absolute, 4); };
 		opcodeTable[0x09] = [this]() { ORA(AddressingMode::Immediate, 2); };
 		opcodeTable[0x05] = [this]() { ORA(AddressingMode::ZeroPage, 3); };
+		opcodeTable[0x15] = [this]() { ORA(AddressingMode::ZeroPageX, 4); };
+		opcodeTable[0x0D] = [this]() { ORA(AddressingMode::Absolute, 4); };
+		opcodeTable[0x1D] = [this]() { ORA(AddressingMode::AbsoluteX, 4); };
+		opcodeTable[0x19] = [this]() { ORA(AddressingMode::AbsoluteY, 4); };
 		opcodeTable[0x01] = [this]() { ORA(AddressingMode::IndirectX, 6); };
 		opcodeTable[0x11] = [this]() { ORA(AddressingMode::IndirectY, 5); };
 
 		//EOR
-		opcodeTable[0x4D] = [this]() { EOR(AddressingMode::Absolute, 4); };
 		opcodeTable[0x49] = [this]() { EOR(AddressingMode::Immediate, 2); };
-		opcodeTable[0x41] = [this]() { EOR(AddressingMode::IndirectX, 6); };
 		opcodeTable[0x45] = [this]() { EOR(AddressingMode::ZeroPage, 3); };
+		opcodeTable[0x55] = [this]() { EOR(AddressingMode::ZeroPageX, 4); };
+		opcodeTable[0x4D] = [this]() { EOR(AddressingMode::Absolute, 4); };
+		opcodeTable[0x5D] = [this]() { EOR(AddressingMode::AbsoluteX, 4); };
+		opcodeTable[0x59] = [this]() { EOR(AddressingMode::AbsoluteY, 4); };
+		opcodeTable[0x41] = [this]() { EOR(AddressingMode::IndirectX, 6); };
+		opcodeTable[0x51] = [this]() { EOR(AddressingMode::IndirectY, 5); };
 
 		//Transfer Indexs
 		opcodeTable[0xAA] = [this]() { Transfer(X, A, true); };
@@ -189,30 +223,45 @@ namespace Emulation
 		opcodeTable[0xCA] = [this]() { RementRegister(X, false); };
 		opcodeTable[0x88] = [this]() { RementRegister(Y, false); };
 
-		//Shift OpCodes
+		//Shift OpCodes (ASL, LSR)
 		opcodeTable[0x0A] = [this]() { Shift(AddressingMode::Accumulator, true, 2); };
-		opcodeTable[0x0E] = [this]() { Shift(AddressingMode::Absolute, true, 6); };
 		opcodeTable[0x06] = [this]() { Shift(AddressingMode::ZeroPage, true, 5); };
+		opcodeTable[0x16] = [this]() { Shift(AddressingMode::ZeroPageX, true, 6); };
+		opcodeTable[0x0E] = [this]() { Shift(AddressingMode::Absolute, true, 6); };
+		opcodeTable[0x1E] = [this]() { Shift(AddressingMode::AbsoluteX, true, 7); };
 
 		opcodeTable[0x4A] = [this]() { Shift(AddressingMode::Accumulator, false, 2); };
 		opcodeTable[0x46] = [this]() { Shift(AddressingMode::ZeroPage, false, 5); };
+		opcodeTable[0x56] = [this]() { Shift(AddressingMode::ZeroPageX, false, 6); };
 		opcodeTable[0x4E] = [this]() { Shift(AddressingMode::Absolute, false, 6); };
+		opcodeTable[0x5E] = [this]() { Shift(AddressingMode::AbsoluteX, false, 7); };
 
-		//Rotate OpCodes
+		//Rotate OpCodes (ROR, ROL)
 		opcodeTable[0x6A] = [this]() { Rotate(AddressingMode::Accumulator, false, 2); };
 		opcodeTable[0x66] = [this]() { Rotate(AddressingMode::ZeroPage, false, 5); };
+		opcodeTable[0x76] = [this]() { Rotate(AddressingMode::ZeroPageX, false, 6); };
 		opcodeTable[0x6E] = [this]() { Rotate(AddressingMode::Absolute, false, 6); };
+		opcodeTable[0x7E] = [this]() { Rotate(AddressingMode::AbsoluteX, false, 7); };
 
 		opcodeTable[0x2A] = [this]() { Rotate(AddressingMode::Accumulator, true, 2); };
 		opcodeTable[0x26] = [this]() { Rotate(AddressingMode::ZeroPage, true, 5); };
+		opcodeTable[0x36] = [this]() { Rotate(AddressingMode::ZeroPageX, true, 6); };
 		opcodeTable[0x2E] = [this]() { Rotate(AddressingMode::Absolute, true, 6); };
+		opcodeTable[0x3E] = [this]() { Rotate(AddressingMode::AbsoluteX, true, 7); };
 
+		opcodeTable[0x27] = [this]() { RLA(AddressingMode::ZeroPage, 5); };
+		opcodeTable[0x37] = [this]() { RLA(AddressingMode::ZeroPageX, 6); };
+		opcodeTable[0x2F] = [this]() { RLA(AddressingMode::Absolute, 6); };
+		opcodeTable[0x3F] = [this]() { RLA(AddressingMode::AbsoluteX, 7); };
+		opcodeTable[0x3B] = [this]() { RLA(AddressingMode::AbsoluteY, 7); };
 		opcodeTable[0x23] = [this]() { RLA(AddressingMode::IndirectX, 8); };
 		opcodeTable[0x33] = [this]() { RLA(AddressingMode::IndirectY, 8); };
 
-		//Decrement Memory Opcodes
+		//Decrement Memory Opcodes (DEC)
 		opcodeTable[0xC6] = [this]() { RementMemory(AddressingMode::ZeroPage, false, 5); };
+		opcodeTable[0xD6] = [this]() { RementMemory(AddressingMode::ZeroPageX, false, 6); };
 		opcodeTable[0xCE] = [this]() { RementMemory(AddressingMode::Absolute, false, 6); };
+		opcodeTable[0xDE] = [this]() { RementMemory(AddressingMode::AbsoluteX, false, 7); };
 
 		//NOP Instructions
 		opcodeTable[0xEA] = [this]() { NOP(AddressingMode::Implied, 2); };
@@ -328,7 +377,7 @@ namespace Emulation
 			uint8_t zp = Fetch();
 			uint16_t base = memoryBus.Read(zp) | (memoryBus.Read((zp + 1) & 0xFF) << 8);
 			uint16_t effective = base + Y;
-			if(pageBoundaryCrossed != nullptr)
+			if (pageBoundaryCrossed != nullptr)
 				*pageBoundaryCrossed = (base & PAGE_NUMBER) != (effective & PAGE_NUMBER);
 			return effective;
 		}
@@ -583,10 +632,13 @@ namespace Emulation
 	{
 		if (mode != AddressingMode::Implied)
 		{
-			if (mode == AddressingMode::Absolute || mode == AddressingMode::AbsoluteX)
-				FetchWord();
-			else
-				Fetch();
+			//Unused
+			bool crossedBoundary = false;
+			GetOperandAddress(mode, &crossedBoundary);
+			
+			//Turns out you actually need to do this check even on NOPs
+			if (crossedBoundary)
+				this->cycles++;
 		}
 
 		this->cycles += cycles;
