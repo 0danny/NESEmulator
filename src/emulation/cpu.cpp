@@ -32,7 +32,7 @@ namespace Emulation
 
 		if (executeInstruction)
 		{
-			Utils::Logger::Info("[", Utils::Logger::Uint16ToHex(PC), "] OpCode (", Utils::Logger::Uint8ToHex(opcode), ")");
+			//Utils::Logger::Info("[", Utils::Logger::Uint16ToHex(PC), "] OpCode (", Utils::Logger::Uint8ToHex(opcode), ")");
 
 			executeInstruction();
 		}
@@ -308,7 +308,7 @@ namespace Emulation
 		//Count OpCodes
 		int numOpcodes = 0;
 
-		for (int i = 0; i < 256; i++)
+		for (int i = 0; i < 0xFF; i++)
 		{
 			if (opcodeTable[i] != nullptr)
 			{
@@ -316,9 +316,9 @@ namespace Emulation
 			}
 		}
 
-		float opCodePercent = floor((static_cast<float>(numOpcodes) / 151) * 100);
+		float opCodePercent = floor((static_cast<float>(numOpcodes) / 0xFF) * 100);
 
-		Utils::Logger::Info("Implemented opcodes ", numOpcodes, " out of 151 (", opCodePercent, "%)");
+		Utils::Logger::Info("Implemented opcodes ", numOpcodes, " out of ", 0xFF, " (", opCodePercent, "%)");
 	}
 
 	uint16_t CPU::GetOperandAddress(AddressingMode mode, bool* pageBoundaryCrossed = nullptr)
@@ -450,7 +450,7 @@ namespace Emulation
 		//Push the return address to the stack, +1 to get the return address.
 		PushStackWord(PC + 1);
 
-		Utils::Logger::Info("Pushing PC onto stack - ", Utils::Logger::Uint16ToHex(PC + 1));
+		//Utils::Logger::Info("Pushing PC onto stack - ", Utils::Logger::Uint16ToHex(PC + 1));
 
 		//Preform normal JMP
 		JMP(AddressingMode::Absolute);

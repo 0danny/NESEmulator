@@ -8,7 +8,11 @@
 #include "monitor/window.h"
 #include "utils/excepthandler.h"
 #include "emulation/memorybus.h"
+#include "emulation/controller.h"
 #include "emulation/testing/cputest.h"
+
+#include <SDL.h>
+#undef main
 
 #include <thread>
 #include <atomic>
@@ -30,9 +34,10 @@ namespace Core
 		Utils::ExceptHandler& exceptHandler;
 		MemoryBus& memoryBus;
 		Testing::CPUTest& cpuTest;
-
+		Controller& controller;
 
 		bool testMode;
+		bool showMonitor;
 
 		Emulator();
 
@@ -40,8 +45,6 @@ namespace Core
 
 	public:
 		int Start(int argc, char* argv[]);
-		void TestCPU();
-		void CreateClock();
 		void Loop();
 
 		static Emulator& Instance()

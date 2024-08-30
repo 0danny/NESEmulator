@@ -8,10 +8,8 @@ namespace Emulation::Graphics
 		tempAddr(0),
 		fineX(0),
 		writeToggle(0),
-		buffer(0),
-		backgroundPatternTableAddr(0),
-		scanline(0),
-		cycle(0)
+		scanLine(0),
+		dot(0)
 	{
 		vram.fill(0);
 		paletteTable.fill(0);
@@ -19,155 +17,473 @@ namespace Emulation::Graphics
 		oam.fill(0);
 		frameComplete = false;
 
-		// Example base NES palette (64 colors)
-		std::array<uint8_t, 64> basePalette = {
-			0x7C, 0x00, 0x10, 0x30, 0x70, 0x90, 0xA0, 0xB0,  // Example values
-			0xC0, 0xD0, 0xE0, 0xF0, 0x1C, 0x2C, 0x3C, 0x4C,
-			0x5C, 0x6C, 0x8C, 0x9C, 0xAC, 0xBC, 0xCC, 0xDC,
-			0xEC, 0xFC, 0x0C, 0x1C, 0x2C, 0x3C, 0x4C, 0x5C,
-			0x6C, 0x7C, 0x8C, 0x9C, 0xAC, 0xBC, 0xCC, 0xDC,
-			0xEC, 0xFC, 0x0C, 0x1C, 0x2C, 0x3C, 0x4C, 0x5C,
-			0x6C, 0x7C, 0x8C, 0x9C, 0xAC, 0xBC, 0xCC, 0xDC,
-			0xEC, 0xFC, 0x0C, 0x1C, 0x2C, 0x3C, 0x4C, 0x5C
-		};
+		memoryBus.RegisterPPUReadCallback([this](uint16_t address) -> uint8_t
+			{
+				return this->PPUReadCallback(address);
+			});
 
-		// Populate the full 256-entry palette by repeating the base palette
-		for (size_t i = 0; i < palette.size(); ++i)
-		{
-			palette[i] = basePalette[i % 64];  // Repeat the base palette across all 256 entries
-		}
-
-		memoryBus.RegisterPPURegisterCallback([this](uint16_t address, uint8_t value, bool reading)
-		{
-			this->PPURegisterCallback(address, value, reading);
-		});
+		memoryBus.RegisterPPUWriteCallback([this](uint16_t address, uint8_t value)
+			{
+				this->PPUWriteCallback(address, value);
+			});
 
 		Utils::Logger::Info("[PPU]: Initialized...");
 	}
 
-	uint8_t PPU::ReadPPURegister(uint16_t addr) const
-	{
-		return memoryBus.Read(addr, false);
-	}
-
-	void PPU::WritePPURegister(uint16_t addr, uint8_t value)
-	{
-		memoryBus.Write(addr, value, false);
-	}
-
 	uint8_t PPU::ReadVRAM(uint16_t addr) const
 	{
-		addr %= VRAM_SIZE;
-		return vram[addr];
+		return vram[addr % VRAM_SIZE];
 	}
 
 	void PPU::WriteVRAM(uint16_t addr, uint8_t value)
 	{
-		addr %= VRAM_SIZE;
-		vram[addr] = value;
+		vram[addr % VRAM_SIZE] = value;
 	}
 
-	void PPU::PPURegisterCallback(uint16_t address, uint16_t value, bool reading)
+	void PPU::PPUWriteCallback(uint16_t address, uint8_t value)
 	{
-		switch (address)
+		uint8_t reg = address % 8;
+
+		switch (reg)
 		{
-		case PPUCTRL:
-			// Update the base address of the background pattern table
-			backgroundPatternTableAddr = (value & 0x10) ? 0x1000 : 0x0000;
+
+		case 0: //PPUCTRL
+			tempAddr = (tempAddr & 0xF3FF) | (((uint16_t)value & 0x03) << 10);
+			//spriteHeight = (data & 0x20) ? 16 : 8;
+			ppuCtrl.val = value;
 			break;
 
-		case PPUSCROLL:
+		case 1: //PPUMASK
+			ppuMask.val = value;
+			break;
+
+		case 2: //PPUSTATUS
+			value &= ~128;
+			ppuStatus.val &= 128;
+			ppuStatus.val |= value;
+			break;
+
+		case 3: //OAMADDR
+			oamAddr = value;
+			break;
+
+		case 4: //OAMDATA
+			break;
+
+		case 5: //PPUSCROLL
 			if (writeToggle == 0)
 			{
-				fineX = value & 0x07;
-				tempAddr = (tempAddr & 0xFFE0) | (value >> 3);
+				tempAddr &= 0x7FE0;
+				tempAddr |= ((uint16_t)value) >> 3;
+				fineX = value & 7;
+				writeToggle = 1;
 			}
 			else
 			{
-				tempAddr = (tempAddr & 0x8FFF) | ((value & 0x07) << 12);
-				tempAddr = (tempAddr & 0xFC1F) | ((value & 0xF8) << 2);
+				tempAddr &= ~0x73E0;
+				tempAddr |= ((uint16_t)value & 0x07) << 12;
+				tempAddr |= ((uint16_t)value & 0xF8) << 2;
+				writeToggle = 0;
 			}
-			writeToggle = !writeToggle;
+
+			ppuScroll = value;
 			break;
 
-		case PPUADDR:
+		case 6: //PPUADDR
 			if (writeToggle == 0)
 			{
-				tempAddr = (tempAddr & 0x00FF) | ((value & 0x3F) << 8);
+				tempAddr &= 255;
+				tempAddr |= ((uint16_t)value & 0x3F) << 8;
+				writeToggle = 1;
 			}
 			else
 			{
-				tempAddr = (tempAddr & 0xFF00) | value;
+				tempAddr &= 0xFF00;
+				tempAddr |= value;
 				vramAddr = tempAddr;
+
+				writeToggle = 0;
 			}
-			writeToggle = !writeToggle;
 			break;
 
-		case PPUDATA:
+		case 7: { //PPUDATA
 			WriteVRAM(vramAddr, value);
-			IncrementVRAMAddr();
+			vramAddr += ppuCtrl.vramAddressIncrement ? 32 : 1;
+			break;
+		}
+
+		default:
+			Utils::Logger::Info("CPU Writing to invalid PPU register - ", Utils::Logger::Uint8ToHex(reg));
 			break;
 		}
 	}
 
+	uint8_t PPU::PPUReadCallback(uint16_t address)
+	{
+		uint8_t reg = address % 8;
+
+		switch (reg)
+		{
+
+		case 0: //PPUCTRL
+			return ppuCtrl.val;
+
+		case 1: //PPUMASK
+			return ppuMask.val;
+
+		case 2: //PPUSTATUS
+			ppuStatusCpy = ppuStatus.val;
+			ppuStatus.val &= ~0x80;
+			writeToggle = 0;
+			return ppuStatusCpy;
+
+		case 3: //OAMADDR
+			return oamAddr;
+
+		case 4: //OAMDATA
+
+			break;
+		case 7: { //PPUDATA
+			// Store the value in the buffer from the previous read (simulating the delayed read behavior of the PPU)
+			ppuReadBuffer = ppuReadBufferCpy;
+
+			// If the current VRAM address points to the palette memory range (0x3F00 - 0x3FFF)
+			if (vramAddr >= 0x3F00 && vramAddr <= 0x3FFF)
+			{
+				// Pre-fetch the mirrored value from VRAM and store it in the secondary buffer
+				ppuReadBufferCpy = ReadVRAM(vramAddr - 0x1000);
+
+				// Apply the greyscale filter if the corresponding bit in ppumask is set
+				ppuReadBuffer = ppuMask.greyScale ? (ReadVRAM(vramAddr) & 0x30) : ReadVRAM(vramAddr);
+			}
+			else
+			{
+				// For non-palette memory, store the current VRAM value in the secondary buffer
+				ppuReadBufferCpy = ReadVRAM(vramAddr);
+			}
+
+			vramAddr += ppuCtrl.vramAddressIncrement ? 32 : 1;
+			return ppuReadBuffer;
+		}
+
+		default:
+			Utils::Logger::Info("CPU Reading from invalid PPU register - ", Utils::Logger::Uint8ToHex(reg));
+			break;
+		}
+	}
+
+	bool PPU::IsRenderingDisabled() 
+	{
+		return !ppuMask.showBg && !ppuMask.showSprites;
+	}
+
+	void PPU::CopyHorizontalBits() 
+	{
+		if (IsRenderingDisabled()) 
+		{
+			return;
+		}
+
+		vramAddr = (vramAddr & ~0x41F) | (tempAddr & 0x41F);
+	}
+
+	void PPU::CopyVerticalBits() 
+	{
+		if (IsRenderingDisabled()) 
+		{
+			return;
+		}
+
+		vramAddr = (vramAddr & ~0x7BE0) | (tempAddr & 0x7BE0);
+	}
 
 	void PPU::Clock()
 	{
-		// Increment cycle
-		cycle++;
-
-		// Check if we've reached the end of a scanline
-		if (cycle > 340)
-		{
-			cycle = 0;
-			scanline++;
-
-			// Check if we've reached the end of the frame
-			if (scanline > 261)
+		if ((scanLine >= 0 && scanLine <= 239) || scanLine == 261) 
+		{  //visible scanline, pre-render scanline
+			if (scanLine == 261) 
 			{
-				scanline = 0;
+				//clear vbl flag and sprite overflow
+				if (dot == 2)
+				{
+					pixelIndex = 0;
+					ppuStatus.val &= ~0x80;
+					ppuStatus.val &= ~0x20;
+					ppuStatus.val &= ~64;
+				}
+
+				//copy vertical bits
+				if (dot >= 280 && dot <= 304) 
+				{
+					CopyVerticalBits();
+				}
+			}
+
+			if (scanLine >= 0 && scanLine <= 239) 
+			{
+				//evalSprites();
+			}
+
+			if (dot == 257) 
+			{
+				CopyHorizontalBits();
+			}
+
+			//main hook: fetch tiles, emit pixel, shift
+			if ((dot >= 1 && dot <= 257) || (dot >= 321 && dot <= 337)) 
+			{
+				//reload shift registers and shift
+				if ((dot >= 2 && dot <= 257) || (dot >= 322 && dot <= 337)) 
+				{
+					ReloadShiftersAndShift();
+				}
+
+				//if on visible scanlines and dots
+				//eval sprites
+				//emit pixels
+				if (scanLine >= 0 && scanLine <= 239) 
+				{
+					if (dot >= 2 && dot <= 257) 
+					{
+						if (scanLine > 0) {
+							//decrementSpriteCounters();
+						}
+
+						EmitPixel();
+					}
+				}
+
+				//fetch nt, at, pattern low - high
+				FetchTiles();
+			}
+		}
+		else if (scanLine >= 240 && scanLine <= 260) 
+		{  //post-render, vblank
+			if (scanLine == 240 && dot == 0) 
+			{
 				frameComplete = true;
 			}
-		}
 
-		// Visible scanlines
-		if (scanline >= 0 && scanline < 240)
-		{
-			if (cycle >= 1 && cycle <= 256)
+			if (scanLine == 241 && dot == 1) 
 			{
-				RenderPixel();
-			}
-		}
-		// Vertical blanking lines
-		else if (scanline >= 241 && scanline <= 260)
-		{
-			if (scanline == 241 && cycle == 1)
-			{
-				//Utils::Logger::Info("ENTERING VBLANK");
+				//set vbl flag
+				ppuStatus.val |= 0x80;
 
-				WritePPURegister(PPUSTATUS, ReadPPURegister(PPUSTATUS) | 0x80); // Set VBlank flag
-
-				if (ReadPPURegister(PPUCTRL) & 0x80)
+				//flag for nmi
+				if (ppuCtrl.val & 0x80) 
 				{
 					auto& cpu = Emulation::CPU::Instance();
-					cpu.RequestNMI();
 
-					Utils::Logger::Info("NMI Requested");
+					cpu.RequestNMI();
 				}
 			}
 		}
-		// Pre-render scanline
-		else if (scanline == 261)
-		{
-			//Utils::Logger::Info("LEAVING VBLANK");
 
-			if (cycle == 1)
+		if (dot == 340)
+		{
+			scanLine = (scanLine + 1) % 262;
+
+			if (scanLine == 0)
 			{
-				WritePPURegister(PPUSTATUS, ReadPPURegister(PPUSTATUS) & ~0x80); // Clear VBlank flag
+				odd = !odd;
 			}
+
+			dot = 0;
+		}
+		else 
+		{
+			dot++;
 		}
 
 		// Utils::Logger::Info("Scanline - ", scanline, " | Cycle - ", cycle);
+	}
+
+	void PPU::EmitPixel() 
+	{
+		if (IsRenderingDisabled()) 
+		{
+			pixelIndex++;
+			return;
+		}
+
+		//Bg
+		uint16_t fineSelect = 0x8000 >> fineX;
+		uint16_t pixel1 = (bgShiftRegLo & fineSelect) << fineX;
+		uint16_t pixel2 = (bgShiftRegHi & fineSelect) << fineX;
+		uint16_t pixel3 = (attrShiftReg1 & fineSelect) << fineX;
+		uint16_t pixel4 = (attrShiftReg2 & fineSelect) << fineX;
+		uint8_t bgBit12 = (pixel2 >> 14) | (pixel1 >> 15);
+
+		//Sprites
+		uint8_t spritePixel1 = 0;
+		uint8_t spritePixel2 = 0;
+		uint8_t spritePixel3 = 0;
+		uint8_t spritePixel4 = 0;
+		uint8_t spriteBit12 = 0;
+		uint8_t paletteIndex = 0 | (pixel4 >> 12) | (pixel3 >> 13) | (pixel2 >> 14) | (pixel1 >> 15);
+		uint8_t spritePaletteIndex = 0;
+		bool showSprite = false;
+		bool spriteFound = false;
+
+		/*
+		for (auto& sprite : spriteRenderEntities) {
+			if (sprite.counter == 0 && sprite.shifted != 8) {
+				if (spriteFound) {
+					sprite.shift();
+					continue;
+				}
+
+				spritePixel1 = sprite.flipHorizontally ? ((sprite.lo & 1) << 7) : sprite.lo & 128;
+				spritePixel2 = sprite.flipHorizontally ? ((sprite.hi & 1) << 7) : sprite.hi & 128;
+				spritePixel3 = sprite.attr & 1;
+				spritePixel4 = sprite.attr & 2;
+				spriteBit12 = (spritePixel2 >> 6) | (spritePixel1 >> 7);
+
+				//Sprite zero hit
+				if (!ppustatus.spriteZeroHit && spriteBit12 && bgBit12 && sprite.id == 0 && ppumask.showSprites && ppumask.showBg && dot < 256) {
+					ppustatus.val |= 64;
+				}
+
+				if (spriteBit12) {
+					showSprite = ((bgBit12 && !(sprite.attr & 32)) || !bgBit12) && ppumask.showSprites;
+					spritePaletteIndex = 0x10 | (spritePixel4 << 2) | (spritePixel3 << 2) | spriteBit12;
+					spriteFound = true;
+				}
+
+				sprite.shift();
+			}
+		}*/
+
+		//When bg rendering is off
+		if (!ppuMask.showBg) 
+		{
+			paletteIndex = 0;
+		}
+
+		uint8_t pindex = ReadVRAM(0x3F00 | (showSprite ? spritePaletteIndex : paletteIndex)) % 64;
+		//Handling grayscale mode
+		uint8_t p = ppuMask.greyScale ? (pindex & 0x30) : pindex;
+
+		//Dark border rect to hide seam of scroll, and other glitches that may occur
+		if (dot <= 9 || dot >= 249 || scanLine <= 7 || scanLine >= 232) 
+		{
+			showSprite = false;
+			p = 13;
+		}
+
+		screenBuffer[pixelIndex++] = palette[p];
+	}
+
+	void PPU::FetchTiles() 
+	{
+		if (IsRenderingDisabled()) 
+		{
+			return;
+		}
+
+		int cycle = dot % 8;
+
+		//Fetch nametable byte
+		if (cycle == 1)
+		{
+			ntbyte = ReadVRAM(0x2000 | (vramAddr & 0x0FFF));
+			//Fetch attribute byte, also calculate which quadrant of the attribute byte is active
+		}
+		else if (cycle == 3) 
+		{
+			attrbyte = ReadVRAM(0x23C0 | (vramAddr & 0x0C00) | ((vramAddr >> 4) & 0x38) | ((vramAddr >> 2) & 0x07));
+			quadrant_num = (((vramAddr & 2) >> 1) | ((vramAddr & 64) >> 5)) * 2;
+			//Get low order bits of background tile
+		}
+		else if (cycle == 5) 
+		{
+			uint16_t patterAddr =
+				((uint16_t)ppuCtrl.bgPatternTableAddress << 12) +
+				((uint16_t)ntbyte << 4) +
+				((vramAddr & 0x7000) >> 12);
+
+			patternlow = ReadVRAM(patterAddr);
+			//Get high order bits of background tile
+		}
+		else if (cycle == 7) 
+		{
+			uint16_t patterAddr =
+				((uint16_t)ppuCtrl.bgPatternTableAddress << 12) +
+				((uint16_t)ntbyte << 4) +
+				((vramAddr & 0x7000) >> 12) + 8;
+
+			patternhigh = ReadVRAM(patterAddr);
+			//Change columns, change rows
+		}
+		else if (cycle == 0) 
+		{
+			if (dot == 256) 
+			{
+				YIncrement();
+			}
+
+			XIncrement();
+		}
+	}
+
+	void PPU::XIncrement() 
+	{
+		if ((vramAddr & 0x001F) == 31) 
+		{
+			vramAddr &= ~0x001F;
+			vramAddr ^= 0x0400;
+		}
+		else {
+			vramAddr += 1;
+		}
+	}
+
+	void PPU::YIncrement() 
+	{
+		if ((vramAddr & 0x7000) != 0x7000) 
+		{
+			vramAddr += 0x1000;
+		}
+		else 
+		{
+			vramAddr &= ~0x7000;
+			int y = (vramAddr & 0x03E0) >> 5;
+
+			if (y == 29) {
+				y = 0;
+				vramAddr ^= 0x0800;
+			}
+			else if (y == 31) {
+				y = 0;
+			}
+			else {
+				y += 1;
+			}
+
+			vramAddr = (vramAddr & ~0x03E0) | (y << 5);
+		}
+	}
+
+	void PPU::ReloadShiftersAndShift() 
+	{
+		if (IsRenderingDisabled()) 
+		{
+			return;
+		}
+
+		bgShiftRegLo <<= 1;
+		bgShiftRegHi <<= 1;
+		attrShiftReg1 <<= 1;
+		attrShiftReg2 <<= 1;
+
+		if (dot % 8 == 1) {
+			uint8_t attr_bits1 = (attrbyte >> quadrant_num) & 1;
+			uint8_t attr_bits2 = (attrbyte >> quadrant_num) & 2;
+			attrShiftReg1 |= attr_bits1 ? 255 : 0;
+			attrShiftReg2 |= attr_bits2 ? 255 : 0;
+			bgShiftRegLo |= patternlow;
+			bgShiftRegHi |= patternhigh;
+		}
 	}
 
 	void PPU::LoadCHRProgram(const std::vector<uint8_t>& chrRom)
@@ -186,73 +502,6 @@ namespace Emulation::Graphics
 		Utils::Logger::Info("[PPU]: CHR ROM data loaded into VRAM.");
 	}
 
-	void PPU::IncrementVRAMAddr()
-	{
-		if (ReadPPURegister(PPUCTRL) & 0x04)
-		{
-			vramAddr += 32;  // Increment by 32 if bit 2 of PPUCTRL is set
-		}
-		else
-		{
-			vramAddr += 1;   // Otherwise, increment by 1
-		}
-	}
-
-	void PPU::RenderPixel()
-	{
-		uint16_t x = cycle - 1;    // Horizontal position (0-255)
-		uint16_t y = scanline;     // Vertical position (0-239)
-
-		if (x < 256 && y < 240)
-		{
-			// Calculate the coarse X and Y positions
-			uint16_t coarseX = (vramAddr & 0x001F);  // bits 0-4
-			uint16_t coarseY = (vramAddr & 0x03E0) >> 5; // bits 5-9
-
-			// Calculate the fine Y position
-			uint16_t fineY = (vramAddr & 0x7000) >> 12; // bits 12-14
-
-			// Calculate the base nametable address (0x2000 or 0x2400)
-			uint16_t nametableBase = 0x2000 | (vramAddr & 0x0C00);
-
-			// Calculate the tile index from the nametable
-			uint16_t tileIndex = ReadVRAM(nametableBase + (coarseY * 32) + coarseX);
-
-			// Calculate the address of the tile in the pattern table
-			uint16_t patternAddr = backgroundPatternTableAddr + (tileIndex * 16) + fineY;
-
-			// Fetch the corresponding row of pixels from the pattern table
-			uint8_t tileLow = ReadVRAM(patternAddr);
-			uint8_t tileHigh = ReadVRAM(patternAddr + 8);
-
-			// Calculate the pixel offset within the tile
-			uint8_t pixelX = (x + fineX) % 8;
-
-			// Determine the pixel color within the tile
-			uint8_t pixel = ((tileLow >> (7 - pixelX)) & 1) | (((tileHigh >> (7 - pixelX)) & 1) << 1);
-
-			// Fetch the attribute byte for this tile to determine its palette
-			uint16_t attributeAddr = nametableBase + 0x03C0 + ((coarseY / 4) * 8) + (coarseX / 4);
-			uint8_t attributeByte = ReadVRAM(attributeAddr);
-
-			// Determine the quadrant within the attribute byte
-			uint8_t quadrant = ((coarseY % 4) / 2) * 2 + ((coarseX % 4) / 2);
-			uint8_t paletteIndex = (attributeByte >> (quadrant * 2)) & 0x03;
-
-			// Fetch the final color from the palette
-			uint32_t color = palette[(paletteIndex * 4) + pixel];
-
-			// Write the color to the screen buffer
-			screenBuffer[y * 256 + x] = color;
-		}
-	}
-
-
-	void PPU::HandleSpriteEvaluation()
-	{
-
-	}
-
 	bool PPU::IsFrameComplete()
 	{
 		if (frameComplete)
@@ -263,19 +512,8 @@ namespace Emulation::Graphics
 		return false;
 	}
 
-
 	const uint32_t* PPU::GetScreenBuffer() const
 	{
 		return screenBuffer.data();
-	}
-
-	uint8_t PPU::FetchBackgroundPixel(uint8_t x, uint8_t y)
-	{
-		return 0;
-	}
-
-	uint8_t PPU::FetchSpritePixel(uint8_t x, uint8_t y)
-	{
-		return 0;
 	}
 }

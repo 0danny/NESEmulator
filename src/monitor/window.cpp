@@ -72,7 +72,7 @@ namespace Monitor
 
 	void Window::Run()
 	{
-		mainWindow->show();
+		//mainWindow->show();
 
 		if (app)
 		{

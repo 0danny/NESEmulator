@@ -2,31 +2,36 @@
 
 namespace Emulation::Graphics
 {
-	Renderer::Renderer() { }
+	Renderer::Renderer() : scaleFactor(3)
+    { 
+    }
 
 	bool Renderer::InitSDL()
 	{
-        if (SDL_Init(SDL_INIT_VIDEO) < 0)
+        if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER) < 0)
         {
             Utils::Logger::Error("SDL could not initialize! SDL_Error - ", SDL_GetError());
             return false;
         }
 
-        window = SDL_CreateWindow("NES Emulator", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_SHOWN);
+        int scaledWidth = SCREEN_WIDTH * scaleFactor;
+        int scaledHeight = SCREEN_HEIGHT * scaleFactor;
+
+        window = SDL_CreateWindow("NES Emulator", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, scaledWidth, scaledHeight, SDL_WINDOW_SHOWN);
         if (window == nullptr)
         {
             Utils::Logger::Error("Window could not be created! SDL_Error - ", SDL_GetError());
             return false;
         }
 
-        renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
+        renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
         if (renderer == nullptr)
         {
             Utils::Logger::Error("Renderer could not be created! SDL_Error - ", SDL_GetError());
             return false;
         }
 
-        texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, SCREEN_WIDTH, SCREEN_HEIGHT);
+        texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, SCREEN_WIDTH, SCREEN_HEIGHT);
         if (texture == nullptr)
         {
             Utils::Logger::Error("Texture could not be created! SDL_Error - ", SDL_GetError());
@@ -36,49 +41,14 @@ namespace Emulation::Graphics
         return true;
 	}
 
-    void Renderer::StartThread()
-    {
-        // Start CPU thread
-        rendererThread = std::thread(&Renderer::Loop, this);
-
-        Utils::Logger::Info("Renderer thread started - ", rendererThread.get_id());
-    }
-
-    void Renderer::Loop()
-    {
-        bool quit = false;
-        SDL_Event e;
-
-        while (!quit)
-        {
-            while (SDL_PollEvent(&e) != 0)
-            {
-                if (e.type == SDL_QUIT)
-                {
-                    quit = true;
-                }
-            }
-
-            SDL_Delay(16);
-        }
-    }
-
     void Renderer::RenderFrame(const uint32_t* pixelBuffer)
     {
-        void* pixels;
-        int pitch;
+        SDL_Rect srcRect = { 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT };
+        SDL_Rect destRect = { 0, 0, SCREEN_WIDTH * scaleFactor, SCREEN_HEIGHT * scaleFactor };
 
-        if (SDL_LockTexture(texture, nullptr, &pixels, &pitch) != 0)
-        {
-            Utils::Logger::Error("Unable to lock texture - ", SDL_GetError());
-            return;
-        }
-
-        memcpy(pixels, pixelBuffer, SCREEN_WIDTH * SCREEN_HEIGHT * sizeof(uint32_t));
-
-        SDL_UnlockTexture(texture);
+        SDL_UpdateTexture(texture, NULL, pixelBuffer, SCREEN_WIDTH * sizeof(Uint32));
         SDL_RenderClear(renderer);
-        SDL_RenderCopy(renderer, texture, nullptr, nullptr);
+        SDL_RenderCopy(renderer, texture, &srcRect, &destRect);
         SDL_RenderPresent(renderer);
     }
 

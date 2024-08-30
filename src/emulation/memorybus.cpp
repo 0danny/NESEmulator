@@ -2,7 +2,9 @@
 
 namespace Emulation
 {
-	MemoryBus::MemoryBus() : exceptHandler(Utils::ExceptHandler::Instance())
+	MemoryBus::MemoryBus() :
+		exceptHandler(Utils::ExceptHandler::Instance()),
+		controller(Controller::Instance())
 	{
 		ram.fill(0); // Initialize RAM with zeros
 	}
@@ -18,9 +20,15 @@ namespace Emulation
 		}
 		else
 		{
-			if (isCPU && (address >= 0x2000 && address <= 0x2007))
+			//PPU registers are mirrored every 8 bytes until 0x4000.
+			if (isCPU && (address >= 0x2000 && address <= 0x4000))
 			{
-				ppuRegisterCallback(address, 0, true);
+				return ppuReadCallback(address);
+			}
+
+			if (address == 0x4016)
+			{
+				controller.Read();
 			}
 
 			std::lock_guard<std::mutex> lock(mutex);
@@ -37,9 +45,14 @@ namespace Emulation
 		}
 		else
 		{
-			if (isCPU && (address >= 0x2000 && address <= 0x2007))
+			if (isCPU && (address >= 0x2000 && address <= 0x4000))
 			{
-				ppuRegisterCallback(address, value, false);
+				ppuWriteCallback(address, value);
+			}
+
+			if (address == 0x4016)
+			{
+				controller.Write(value);
 			}
 
 			std::lock_guard<std::mutex> lock(mutex);
@@ -49,42 +62,17 @@ namespace Emulation
 
 	uint16_t MemoryBus::ReadWord(uint16_t address, bool isCPU) const
 	{
-		if (address < 0 || address > ram.size() - 1)
-		{
-			exceptHandler.ThrowException("Attempted memory read word outside bounds.", Utils::Logger::Uint16ToHex(address));
+		uint16_t lowByte = Read(address, isCPU);
+		uint16_t highByte = Read(address + 1, isCPU);
 
-			return 0;
-		}
-		else
-		{
-			if (isCPU && (address >= 0x2000 && address <= 0x2007))
-			{
-				ppuRegisterCallback(address, 0, true);
-			}
-
-			std::lock_guard<std::mutex> lock(mutex);
-			return static_cast<uint16_t>(ram[address]) | (static_cast<uint16_t>(ram[address + 1]) << 8);
-		}
+		return (highByte << 8) | lowByte;
 	}
+
 
 	void MemoryBus::WriteWord(uint16_t address, uint16_t value, bool isCPU)
 	{
-		// Check if the write is inside bounds
-		if (address < 0 || address > ram.size() - 2)  // Check if there's enough space for both bytes
-		{
-			exceptHandler.ThrowException("Attempted memory write word outside bounds.", Utils::Logger::Uint16ToHex(address));
-		}
-		else
-		{
-			if (isCPU && (address >= 0x2000 && address <= 0x2007))
-			{
-				ppuRegisterCallback(address, value, false);
-			}
-
-			std::lock_guard<std::mutex> lock(mutex);
-			ram[address] = value & 0xFF;
-			ram[address + 1] = (value >> 8) & 0xFF;
-		}
+		Write(address, value & 0xFF, isCPU);         // Write the lower byte
+		Write(address + 1, (value >> 8) & 0xFF, isCPU);  // Write the upper byte
 	}
 
 	void MemoryBus::LoadRawProgram(const uint8_t* program, uint16_t programSize, uint16_t loadAddress)
@@ -124,8 +112,13 @@ namespace Emulation
 		}
 	}
 
-	void MemoryBus::RegisterPPURegisterCallback(PPURegisterCallback callback)
+	void MemoryBus::RegisterPPUWriteCallback(PPUWriteCallback callback)
 	{
-		ppuRegisterCallback = std::move(callback);
+		ppuWriteCallback = std::move(callback);
+	}
+
+	void MemoryBus::RegisterPPUReadCallback(PPUReadCallback callback)
+	{
+		ppuReadCallback = std::move(callback);
 	}
 }

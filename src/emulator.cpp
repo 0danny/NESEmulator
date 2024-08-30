@@ -10,9 +10,11 @@ namespace Core
         monitor(Monitor::Window::Instance()),
         exceptHandler(Utils::ExceptHandler::Instance()),
         memoryBus(MemoryBus::Instance()),
-        cpuTest(Testing::CPUTest::Instance())
+        cpuTest(Testing::CPUTest::Instance()),
+        controller(Controller::Instance())
     {
         testMode = false;
+        showMonitor = true;
     } 
 
 	int Emulator::Start(int argc, char* argv[])
@@ -33,25 +35,28 @@ namespace Core
         }
 
         // Load ROM first.
-        if (romReader.LoadRom("games/donkeykongjr.nes"))
+        if (romReader.LoadRom("games/pong.nes"))
         {
             //Show header of loaded ROM.
             romReader.PrintHeader();
 
             //Load the rom into memory.
             memoryBus.LoadPrgProgram(romReader.GetPRGRom());
-            cpu.Reset(); //Reset the CPU to ensure we load the correct vector.
-
             ppu.LoadCHRProgram(romReader.GetCHRRom());
 
-            //Start CPU & Renderer threads.
-            CreateClock();
-            renderer.StartThread();
+            cpu.Reset(); //Reset the CPU to ensure we load the correct vector.
 
-            //Create monitor window.
-            monitor.Create(argc, argv);
-            monitor.AddControls(romReader.GetPRGRom());
-            monitor.Run();
+            // Start Clock thread
+            clockThread = std::thread(&Emulator::Loop, this);
+            Utils::Logger::Info("Clock thread started - ", clockThread.get_id());
+
+            if (showMonitor)
+            {
+                //Create monitor window.
+                monitor.Create(argc, argv);
+                monitor.AddControls(romReader.GetPRGRom());
+                monitor.Run();
+            }
 
             //Cleanup
             clockThread.join();
@@ -60,14 +65,6 @@ namespace Core
 
         return 0;
 	}
-
-    void Emulator::CreateClock()
-    {
-        // Start Clock thread
-        clockThread = std::thread(&Emulator::Loop, this);
-
-        Utils::Logger::Info("Clock thread started - ", clockThread.get_id());
-    }
 
     void Emulator::Loop()
     {
@@ -84,10 +81,10 @@ namespace Core
             if (ppu.IsFrameComplete())
             {
                 renderer.RenderFrame(ppu.GetScreenBuffer());
-            }
 
-            //std::this_thread::sleep_for(std::chrono::microseconds(1));
-            //std::this_thread::sleep_for(std::chrono::milliseconds(500));
+                //Check for input.
+                controller.HandleInput();
+            }
         }
 
         Utils::Logger::Error("FATAL - Fell out of clock loop.");

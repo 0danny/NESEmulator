@@ -6,15 +6,19 @@
 #include <functional>
 
 #include "utils/excepthandler.h"
+#include "emulation/controller.h"
 
-using PPURegisterCallback = std::function<void(uint16_t address, uint16_t value, bool reading)>;
 
 namespace Emulation
 {
+	using PPUWriteCallback = std::function<void(uint16_t address, uint8_t value)>;
+	using PPUReadCallback = std::function<uint8_t(uint16_t address)>;
+
 	class MemoryBus 
 	{
 	private:
-		PPURegisterCallback ppuRegisterCallback;
+		PPUWriteCallback ppuWriteCallback;
+		PPUReadCallback ppuReadCallback;
 
 		static constexpr size_t RAM_SIZE = 65536; // 64KB of RAM
 		std::array<uint8_t, RAM_SIZE> ram;
@@ -22,6 +26,7 @@ namespace Emulation
 
 		//Singletons
 		Utils::ExceptHandler& exceptHandler;
+		Controller& controller;
 
 		MemoryBus();
 
@@ -47,7 +52,8 @@ namespace Emulation
 		void LoadRawProgram(const uint8_t* program, uint16_t programSize, uint16_t loadAddress);
 		void LoadPrgProgram(const std::vector<uint8_t>& prgRom);
 
-		void RegisterPPURegisterCallback(PPURegisterCallback callback);
+		void RegisterPPUWriteCallback(PPUWriteCallback callback);
+		void RegisterPPUReadCallback(PPUReadCallback callback);
 	};
 }
 
