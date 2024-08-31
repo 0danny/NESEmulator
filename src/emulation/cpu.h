@@ -9,6 +9,7 @@
 #include "emulation/graphics/ppu.h"
 #include "emulation/memorybus.h"
 #include "monitor/window.h"
+#include "emulation/graphics/ppu.h"
 
 #define LOBYTE(w)           ((uint8_t)(w))
 #define HIBYTE(w)           ((uint8_t)(((uint16_t)(w) >> 8) & 0xFF))
@@ -36,7 +37,6 @@ namespace Emulation
 
 		void Reset();
 		void Clock();
-		void RequestNMI();
 
 		uint8_t A = 0;   // Accumulator
 		uint8_t X = 0;   // X Register
@@ -53,6 +53,7 @@ namespace Emulation
 		}
 
 	private:
+		Graphics::PPU& ppu;
 		MemoryBus& memoryBus;
 		Utils::ExceptHandler& exceptHandler;
 
@@ -95,25 +96,25 @@ namespace Emulation
 		void JSR();
 
 		//Instruction Operations
-		void LD(AddressingMode mode, uint8_t& reg, int cycles);
-		void ST(AddressingMode mode, uint8_t& reg, int cycles);
-		void CMP(AddressingMode mode, uint8_t& reg, int cycles);
-		void ADC_SBC(AddressingMode mode, int cycles, bool isSubtraction);
-		void AND(AddressingMode mode, int cycles);
-		void NOP(AddressingMode mode, int cycles);
-		void INC(AddressingMode mode, int cycles);
-		void ORA(AddressingMode mode, int cycles);
+		void LD(AddressingMode mode, uint8_t& reg);
+		void ST(AddressingMode mode, uint8_t& reg);
+		void CMP(AddressingMode mode, uint8_t& reg);
+		void ADC_SBC(AddressingMode mode, bool isSubtraction);
+		void AND(AddressingMode mode);
+		void NOP(AddressingMode mode);
+		void INC(AddressingMode mode);
+		void ORA(AddressingMode mode);
 		void RLA(AddressingMode mode, int cycles);
 		void JMP(AddressingMode mode);
 		void Branch(bool condition);
-		void BIT(AddressingMode mode, int cycles);
-		void EOR(AddressingMode mode, int cycles);
+		void BIT(AddressingMode mode);
+		void EOR(AddressingMode mode);
 		void FlagOperation(uint8_t flag, bool setFlag);
 		void Transfer(uint8_t& dest, uint8_t& src, bool setFlags);
-		void RementMemory(AddressingMode mode, bool increment, int cycles);
+		void RementMemory(AddressingMode mode, bool increment);
 		void RementRegister(uint8_t& reg, bool increment);
-		void Rotate(AddressingMode mode, bool rotateLeft, int cycles);
-		void Shift(AddressingMode mode, bool shiftLeft, int cycles);
+		void Rotate(AddressingMode mode, bool rotateLeft);
+		void Shift(AddressingMode mode, bool shiftLeft);
 
 		//Illegal OpCodes (Unused)
 		void SLO_ZPX();
@@ -136,10 +137,14 @@ namespace Emulation
 
 		void ExceptionWrapper(std::string reason, std::string error);
 		void InitializeOpcodes();
+		uint8_t Read(uint16_t address);
+		uint16_t ReadWord(uint16_t address);
+		void Write(uint16_t address, uint8_t value);
 		void CountOpCodes();
+		void AddCycle();
 		void PrintState();
 
-		uint16_t GetOperandAddress(AddressingMode mode, bool* pageBoundaryCrossed);
+		uint16_t GetOperandAddress(AddressingMode mode, bool addCycle);
 	};
 }
 

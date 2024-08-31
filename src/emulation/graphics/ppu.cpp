@@ -272,9 +272,7 @@ namespace Emulation::Graphics
 				//flag for nmi
 				if (ppuCtrl.val & 0x80) 
 				{
-					auto& cpu = Emulation::CPU::Instance();
-
-					cpu.RequestNMI();
+					triggeredNMI = true;
 				}
 			}
 		}

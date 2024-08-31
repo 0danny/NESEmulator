@@ -1,6 +1,5 @@
 #pragma once
 #include "utils/logger.h"
-#include "emulation/cpu.h"
 #include "emulation/memorybus.h"
 #include <array>
 #include <cstdint>
@@ -18,6 +17,8 @@ namespace Emulation::Graphics
         bool IsFrameComplete();
         void PPUWriteCallback(uint16_t address, uint8_t value);
         uint8_t PPUReadCallback(uint16_t address);
+
+        bool triggeredNMI = false;
 
         static PPU& Instance()
         {

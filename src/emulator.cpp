@@ -13,7 +13,7 @@ namespace Core
         cpuTest(Testing::CPUTest::Instance()),
         controller(Controller::Instance())
     {
-        testMode = false;
+        testMode = true;
         showMonitor = true;
     } 
 
@@ -71,12 +71,6 @@ namespace Core
         while (!exceptHandler.HasException())
         {
             cpu.Clock();
-
-            // Clock the PPU three times for every CPU cycle
-            for (int i = 0; i < 3; ++i)
-            {
-                ppu.Clock();
-            }
 
             if (ppu.IsFrameComplete())
             {

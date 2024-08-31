@@ -28,7 +28,7 @@ namespace Emulation
 
 			if (address == 0x4016)
 			{
-				controller.Read();
+				return controller.Read();
 			}
 
 			std::lock_guard<std::mutex> lock(mutex);

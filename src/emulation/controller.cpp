@@ -2,7 +2,8 @@
 
 namespace Emulation
 {
-    Controller::Controller() { }
+    Controller::Controller() 
+    { }
 
 	void Controller::HandleInput()
 	{
@@ -50,7 +51,7 @@ namespace Emulation
 
     void Controller::Write(uint8_t data) 
     {
-        Utils::Logger::Info("Write called.");
+        //Utils::Logger::Info("Write called.");
 
         strobe = data & 1;
         if (strobe) 
@@ -69,7 +70,7 @@ namespace Emulation
     // Function to handle reads from 0x4016
     uint8_t Controller::Read() 
     {
-        Utils::Logger::Info("Read called.");
+        //Utils::Logger::Info("Read called.");
 
         uint8_t result = controller1.shiftRegister & 1;
         if (!strobe) 
