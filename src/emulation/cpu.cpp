@@ -2,8 +2,8 @@
 
 namespace Emulation
 {
-	CPU::CPU() : 
-		memoryBus(MemoryBus::Instance()), 
+	CPU::CPU() :
+		memoryBus(MemoryBus::Instance()),
 		exceptHandler(Utils::ExceptHandler::Instance()),
 		ppu(Graphics::PPU::Instance())
 	{
@@ -17,8 +17,7 @@ namespace Emulation
 
 		SP = 0xFD;
 		P = 0x24;
-
-		PC = ReadWord(0xFFFC);  // Reset vector
+		PC = memoryBus.ReadWord(0xFFFC);  // Reset vector
 		Utils::Logger::Info("Reset Vector - ", Utils::Logger::Uint16ToHex(PC));
 
 		cycles = 7;
@@ -35,14 +34,13 @@ namespace Emulation
 
 		if (executeInstruction)
 		{
-			Utils::Logger::Info("[", Utils::Logger::Uint16ToHex(PC), "] OpCode [" , opcodeStruct.name , "] (", Utils::Logger::Uint8ToHex(opcode), ")");
+			//Utils::Logger::Info("[", Utils::Logger::Uint16ToHex(PC), "] OpCode [", opcodeStruct.name, "] (", Utils::Logger::Uint8ToHex(opcode), ")");
 
 			executeInstruction();
 
 			if (ppu.triggeredNMI)
 			{
-				//NMI();
-
+				NMI();
 				ppu.triggeredNMI = false;
 			}
 		}
@@ -259,13 +257,13 @@ namespace Emulation
 		opcodeTable[0x2E] = [this]() { Rotate(AddressingMode::Absolute, true); };
 		opcodeTable[0x3E] = [this]() { Rotate(AddressingMode::AbsoluteX, true); };
 
-		opcodeTable[0x27] = [this]() { RLA(AddressingMode::ZeroPage, 5); };
-		opcodeTable[0x37] = [this]() { RLA(AddressingMode::ZeroPageX, 6); };
-		opcodeTable[0x2F] = [this]() { RLA(AddressingMode::Absolute, 6); };
-		opcodeTable[0x3F] = [this]() { RLA(AddressingMode::AbsoluteX, 7); };
-		opcodeTable[0x3B] = [this]() { RLA(AddressingMode::AbsoluteY, 7); };
-		opcodeTable[0x23] = [this]() { RLA(AddressingMode::IndirectX, 8); };
-		opcodeTable[0x33] = [this]() { RLA(AddressingMode::IndirectY, 8); };
+		//opcodeTable[0x27] = [this]() { RLA(AddressingMode::ZeroPage, 5); };
+		//opcodeTable[0x37] = [this]() { RLA(AddressingMode::ZeroPageX, 6); };
+		//opcodeTable[0x2F] = [this]() { RLA(AddressingMode::Absolute, 6); };
+		//opcodeTable[0x3F] = [this]() { RLA(AddressingMode::AbsoluteX, 7); };
+		//opcodeTable[0x3B] = [this]() { RLA(AddressingMode::AbsoluteY, 7); };
+		//opcodeTable[0x23] = [this]() { RLA(AddressingMode::IndirectX, 8); };
+		//opcodeTable[0x33] = [this]() { RLA(AddressingMode::IndirectY, 8); };
 
 		//Decrement Memory Opcodes (DEC)
 		opcodeTable[0xC6] = [this]() { RementMemory(AddressingMode::ZeroPage, false); };
@@ -323,8 +321,11 @@ namespace Emulation
 	uint16_t CPU::ReadWord(uint16_t address)
 	{
 		uint16_t result = memoryBus.ReadWord(address);
+
 		AddCycle();
 		AddCycle();
+
+
 		return result;
 	}
 
@@ -451,46 +452,36 @@ namespace Emulation
 
 	void CPU::NMI()
 	{
-		// Push the current PC onto the stack
+		// 7 Cycles
 		PushStackWord(PC);
 
-		// Push the status register onto the stack
-		SetBreakFlag(false); // Clear the Break flag before pushing
+		SetBreakFlag(false);
 		PushStack(P);
 
-		// Disable further interrupts
 		SetInterruptFlag(true);
 
-		// Read the NMI vector (0xFFFA-0xFFFB) and jump to that address
 		PC = ReadWord(0xFFFA);
 
-		// The NMI takes 7 cycles to execute
-		cycles += 7;
+		AddCycle();
 	}
 
 	void CPU::BRK()
 	{
-		// Providing an extra byte of spacing for a break mark (identifying a reason for the break.)
 		PC += 2;
 
-		//Push the return address onto the stack
 		PushStackWord(PC);
 
-		// Set break to 1 before pushing P onto the stack.
 		SetBreakFlag(true);
 
-		// Push status register onto stack.
 		PushStack(P);
 
-		// Set interrupt bit.
 		SetInterruptFlag(true);
 
-		// Fetch the interrupt vector from $FFFE/$FFFF and set the PC
 		PC = ReadWord(0xFFFE);
 
 		//Utils::Logger::Warning("CPU ENTERED INTERRUPT HANDLER at ", Utils::Logger::Uint16ToHex(PC));
 
-		cycles += 7;
+		AddCycle();
 	}
 
 	void CPU::JSR()
@@ -650,6 +641,9 @@ namespace Emulation
 		SetNegativeFlag(value & NEGATIVE_FLAG);
 
 		AddCycle();
+
+		if (mode == AddressingMode::AbsoluteX)
+			AddCycle();
 	}
 
 	void CPU::RementRegister(uint8_t& reg, bool increment)
@@ -678,15 +672,12 @@ namespace Emulation
 		}
 	}
 
-
 	void CPU::NOP(AddressingMode mode)
 	{
-		if (mode != AddressingMode::Implied)
-		{
-			GetOperandAddress(mode);
-		}
+		GetOperandAddress(mode);
 
-		AddCycle();
+		if (mode != AddressingMode::Immediate)
+			AddCycle();
 	}
 
 	void CPU::INC(AddressingMode mode)
@@ -702,6 +693,9 @@ namespace Emulation
 		SetNegativeFlag(value & NEGATIVE_FLAG);
 
 		AddCycle();
+
+		if (mode == AddressingMode::AbsoluteX)
+			AddCycle();
 	}
 
 	void CPU::ORA(AddressingMode mode)
@@ -770,6 +764,9 @@ namespace Emulation
 		SetNegativeFlag(value & NEGATIVE_FLAG);
 
 		AddCycle();
+
+		if (mode == AddressingMode::AbsoluteX)
+			AddCycle();
 	}
 
 	void CPU::Shift(AddressingMode mode, bool shiftLeft)
@@ -927,7 +924,7 @@ namespace Emulation
 		{
 			P |= flag;
 		}
-		else 
+		else
 		{
 			P &= ~flag;
 		}

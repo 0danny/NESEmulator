@@ -41,11 +41,6 @@ namespace Emulation
                 break;
 
             }
-
-            if (event.key.keysym.sym == SDLK_RETURN)
-            {
-                Utils::Logger::Info("Return button pressed.");
-            }
         }
 	}
 
@@ -54,9 +49,11 @@ namespace Emulation
         //Utils::Logger::Info("Write called.");
 
         strobe = data & 1;
+
         if (strobe) 
         {
-            controller1.shiftRegister = (controller1.buttons[7] << 7) |
+            controller1.shiftRegister = 
+                (controller1.buttons[7] << 7) |
                 (controller1.buttons[6] << 6) |
                 (controller1.buttons[5] << 5) |
                 (controller1.buttons[4] << 4) |

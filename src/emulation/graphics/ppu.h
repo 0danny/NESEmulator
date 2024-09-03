@@ -10,15 +10,33 @@ namespace Emulation::Graphics
     {
     public:
         PPU();
+
+        int scanLine;
+        int dot;
+
         void Clock();
         void EmitPixel();
         void LoadCHRProgram(const std::vector<uint8_t>& chrRom);
         const uint32_t* GetScreenBuffer() const;
-        bool IsFrameComplete();
         void PPUWriteCallback(uint16_t address, uint8_t value);
         uint8_t PPUReadCallback(uint16_t address);
 
         bool triggeredNMI = false;
+        bool frameComplete;
+        bool dontShow = false;
+
+        //$2002 PPUSTATUS
+        union {
+            struct
+            {
+                unsigned leastSignificantBits : 5;
+                unsigned spriteOverflow : 1;
+                unsigned spriteZeroHit : 1;
+                unsigned vBlank : 1;
+            };
+
+            uint8_t val;
+        } ppuStatus;
 
         static PPU& Instance()
         {
@@ -47,12 +65,8 @@ namespace Emulation::Graphics
         uint8_t ppuReadBuffer = 0;
         uint8_t ppuReadBufferCpy = 0;
 
-        int scanLine;
-        int dot;
         int pixelIndex = 0;
-        bool odd = false;
 
-        bool frameComplete;
 
         uint32_t palette[64] = {
             4283716692, 4278197876, 4278718608, 4281335944, 4282646628, 4284219440, 4283696128, 4282128384,
@@ -97,18 +111,7 @@ namespace Emulation::Graphics
             uint8_t val;
         } ppuMask;
 
-        //$2002 PPUSTATUS
-        union {
-            struct
-            {
-                unsigned leastSignificantBits : 5;
-                unsigned spriteOverflow : 1;
-                unsigned spriteZeroHit : 1;
-                unsigned vBlank : 1;
-            };
-
-            uint8_t val;
-        } ppuStatus;
+       
 
         uint8_t oamAddr = 0;    //$2003
         uint8_t oamData = 0;    //$2004
@@ -141,6 +144,8 @@ namespace Emulation::Graphics
 
         bool IsRenderingDisabled();
         void CopyVerticalBits();
+        void PreRender();
+        void PostRender();
         void CopyHorizontalBits();
         void ReloadShiftersAndShift();
     };

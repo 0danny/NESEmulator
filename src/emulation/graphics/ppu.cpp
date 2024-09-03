@@ -9,7 +9,15 @@ namespace Emulation::Graphics
 		fineX(0),
 		writeToggle(0),
 		scanLine(0),
-		dot(0)
+		dot(0),
+		attrShiftReg1(0),
+		attrShiftReg2(0),
+		attrbyte(0),
+		bgShiftRegHi(0),
+		bgShiftRegLo(0),
+		ntbyte(0),
+		patternhigh(0),
+		patternlow(0)
 	{
 		vram.fill(0);
 		paletteTable.fill(0);
@@ -57,12 +65,6 @@ namespace Emulation::Graphics
 			ppuMask.val = value;
 			break;
 
-		case 2: //PPUSTATUS
-			value &= ~128;
-			ppuStatus.val &= 128;
-			ppuStatus.val |= value;
-			break;
-
 		case 3: //OAMADDR
 			oamAddr = value;
 			break;
@@ -90,6 +92,9 @@ namespace Emulation::Graphics
 			break;
 
 		case 6: //PPUADDR
+			Utils::Logger::Debug("CPU Writing to PPU ADDR [Scanline ", scanLine, ", Dot ", dot, "] (Vblank: ", ppuStatus.vBlank, ")");
+
+
 			if (writeToggle == 0)
 			{
 				tempAddr &= 255;
@@ -106,11 +111,12 @@ namespace Emulation::Graphics
 			}
 			break;
 
-		case 7: { //PPUDATA
+		case 7:  //PPUDATA
+			Utils::Logger::Debug("CPU Writing to PPU DATA [Scanline ", scanLine, ", Dot ", dot, "] (Vblank: ", ppuStatus.vBlank, ")");
+
 			WriteVRAM(vramAddr, value);
 			vramAddr += ppuCtrl.vramAddressIncrement ? 32 : 1;
 			break;
-		}
 
 		default:
 			Utils::Logger::Info("CPU Writing to invalid PPU register - ", Utils::Logger::Uint8ToHex(reg));
@@ -132,10 +138,8 @@ namespace Emulation::Graphics
 			return ppuMask.val;
 
 		case 2: //PPUSTATUS
-			ppuStatusCpy = ppuStatus.val;
-			ppuStatus.val &= ~0x80;
-			writeToggle = 0;
-			return ppuStatusCpy;
+			//Utils::Logger::Debug("We are saying to the CPU (Vblank: ", ppuStatus.vBlank, ")", " [Scanline ", scanLine, ", Dot ", dot, "]");
+			return ppuStatus.val;
 
 		case 3: //OAMADDR
 			return oamAddr;
@@ -180,9 +184,7 @@ namespace Emulation::Graphics
 	void PPU::CopyHorizontalBits() 
 	{
 		if (IsRenderingDisabled()) 
-		{
 			return;
-		}
 
 		vramAddr = (vramAddr & ~0x41F) | (tempAddr & 0x41F);
 	}
@@ -190,33 +192,61 @@ namespace Emulation::Graphics
 	void PPU::CopyVerticalBits() 
 	{
 		if (IsRenderingDisabled()) 
-		{
 			return;
-		}
 
 		vramAddr = (vramAddr & ~0x7BE0) | (tempAddr & 0x7BE0);
+	}
+	
+	//scanLine == 261
+	inline void PPU::PreRender()
+	{
+		//clear vbl flag and sprite overflow
+		if (dot == 2)
+		{
+			pixelIndex = 0;
+
+			ppuStatus.vBlank = 0;
+			ppuStatus.spriteOverflow = 0;
+			ppuStatus.spriteZeroHit = 0;
+		}
+
+		//copy vertical bits
+		if (dot >= 280 && dot <= 304)
+		{
+			CopyVerticalBits();
+		}
+	}
+
+	//scanLine >= 240 && scanLine <= 260
+	inline void PPU::PostRender()
+	{
+		//post-render, vblank
+		if (scanLine == 240 && dot == 0)
+		{
+			frameComplete = true;
+		}
+
+		if (scanLine == 241 && dot == 1)
+		{
+			//set vbl flag
+			ppuStatus.vBlank = 1;
+
+			//flag for nmi
+			if (ppuCtrl.generateNMI)
+			{
+				triggeredNMI = true;
+			}
+		}
 	}
 
 	void PPU::Clock()
 	{
 		if ((scanLine >= 0 && scanLine <= 239) || scanLine == 261) 
-		{  //visible scanline, pre-render scanline
+		{  
+			//visible scanline, pre-render scanline
 			if (scanLine == 261) 
 			{
-				//clear vbl flag and sprite overflow
-				if (dot == 2)
-				{
-					pixelIndex = 0;
-					ppuStatus.val &= ~0x80;
-					ppuStatus.val &= ~0x20;
-					ppuStatus.val &= ~64;
-				}
-
-				//copy vertical bits
-				if (dot >= 280 && dot <= 304) 
-				{
-					CopyVerticalBits();
-				}
+				PreRender();
 			}
 
 			if (scanLine >= 0 && scanLine <= 239) 
@@ -238,14 +268,12 @@ namespace Emulation::Graphics
 					ReloadShiftersAndShift();
 				}
 
-				//if on visible scanlines and dots
-				//eval sprites
-				//emit pixels
 				if (scanLine >= 0 && scanLine <= 239) 
 				{
 					if (dot >= 2 && dot <= 257) 
 					{
-						if (scanLine > 0) {
+						if (scanLine > 0) 
+						{
 							//decrementSpriteCounters();
 						}
 
@@ -258,42 +286,18 @@ namespace Emulation::Graphics
 			}
 		}
 		else if (scanLine >= 240 && scanLine <= 260) 
-		{  //post-render, vblank
-			if (scanLine == 240 && dot == 0) 
-			{
-				frameComplete = true;
-			}
+			PostRender();
 
-			if (scanLine == 241 && dot == 1) 
-			{
-				//set vbl flag
-				ppuStatus.val |= 0x80;
-
-				//flag for nmi
-				if (ppuCtrl.val & 0x80) 
-				{
-					triggeredNMI = true;
-				}
-			}
-		}
 
 		if (dot == 340)
 		{
 			scanLine = (scanLine + 1) % 262;
-
-			if (scanLine == 0)
-			{
-				odd = !odd;
-			}
-
 			dot = 0;
 		}
 		else 
-		{
 			dot++;
-		}
 
-		// Utils::Logger::Info("Scanline - ", scanline, " | Cycle - ", cycle);
+		//Utils::Logger::Info("Scanline - ", scanline, " | Cycle - ", cycle);
 	}
 
 	void PPU::EmitPixel() 
@@ -312,60 +316,21 @@ namespace Emulation::Graphics
 		uint16_t pixel4 = (attrShiftReg2 & fineSelect) << fineX;
 		uint8_t bgBit12 = (pixel2 >> 14) | (pixel1 >> 15);
 
-		//Sprites
-		uint8_t spritePixel1 = 0;
-		uint8_t spritePixel2 = 0;
-		uint8_t spritePixel3 = 0;
-		uint8_t spritePixel4 = 0;
-		uint8_t spriteBit12 = 0;
 		uint8_t paletteIndex = 0 | (pixel4 >> 12) | (pixel3 >> 13) | (pixel2 >> 14) | (pixel1 >> 15);
-		uint8_t spritePaletteIndex = 0;
-		bool showSprite = false;
-		bool spriteFound = false;
 
-		/*
-		for (auto& sprite : spriteRenderEntities) {
-			if (sprite.counter == 0 && sprite.shifted != 8) {
-				if (spriteFound) {
-					sprite.shift();
-					continue;
-				}
-
-				spritePixel1 = sprite.flipHorizontally ? ((sprite.lo & 1) << 7) : sprite.lo & 128;
-				spritePixel2 = sprite.flipHorizontally ? ((sprite.hi & 1) << 7) : sprite.hi & 128;
-				spritePixel3 = sprite.attr & 1;
-				spritePixel4 = sprite.attr & 2;
-				spriteBit12 = (spritePixel2 >> 6) | (spritePixel1 >> 7);
-
-				//Sprite zero hit
-				if (!ppustatus.spriteZeroHit && spriteBit12 && bgBit12 && sprite.id == 0 && ppumask.showSprites && ppumask.showBg && dot < 256) {
-					ppustatus.val |= 64;
-				}
-
-				if (spriteBit12) {
-					showSprite = ((bgBit12 && !(sprite.attr & 32)) || !bgBit12) && ppumask.showSprites;
-					spritePaletteIndex = 0x10 | (spritePixel4 << 2) | (spritePixel3 << 2) | spriteBit12;
-					spriteFound = true;
-				}
-
-				sprite.shift();
-			}
-		}*/
-
-		//When bg rendering is off
 		if (!ppuMask.showBg) 
 		{
 			paletteIndex = 0;
 		}
 
-		uint8_t pindex = ReadVRAM(0x3F00 | (showSprite ? spritePaletteIndex : paletteIndex)) % 64;
+		uint8_t pindex = ReadVRAM(0x3F00 | paletteIndex) % 64;
+
 		//Handling grayscale mode
 		uint8_t p = ppuMask.greyScale ? (pindex & 0x30) : pindex;
 
 		//Dark border rect to hide seam of scroll, and other glitches that may occur
 		if (dot <= 9 || dot >= 249 || scanLine <= 7 || scanLine >= 232) 
 		{
-			showSprite = false;
 			p = 13;
 		}
 
@@ -375,9 +340,7 @@ namespace Emulation::Graphics
 	void PPU::FetchTiles() 
 	{
 		if (IsRenderingDisabled()) 
-		{
 			return;
-		}
 
 		int cycle = dot % 8;
 
@@ -431,7 +394,8 @@ namespace Emulation::Graphics
 			vramAddr &= ~0x001F;
 			vramAddr ^= 0x0400;
 		}
-		else {
+		else 
+		{
 			vramAddr += 1;
 		}
 	}
@@ -447,14 +411,17 @@ namespace Emulation::Graphics
 			vramAddr &= ~0x7000;
 			int y = (vramAddr & 0x03E0) >> 5;
 
-			if (y == 29) {
+			if (y == 29) 
+			{
 				y = 0;
 				vramAddr ^= 0x0800;
 			}
-			else if (y == 31) {
+			else if (y == 31) 
+			{
 				y = 0;
 			}
-			else {
+			else 
+			{
 				y += 1;
 			}
 
@@ -474,7 +441,8 @@ namespace Emulation::Graphics
 		attrShiftReg1 <<= 1;
 		attrShiftReg2 <<= 1;
 
-		if (dot % 8 == 1) {
+		if (dot % 8 == 1) 
+		{
 			uint8_t attr_bits1 = (attrbyte >> quadrant_num) & 1;
 			uint8_t attr_bits2 = (attrbyte >> quadrant_num) & 2;
 			attrShiftReg1 |= attr_bits1 ? 255 : 0;
@@ -498,16 +466,6 @@ namespace Emulation::Graphics
 		std::copy(chrRom.begin(), chrRom.end(), vram.begin());
 
 		Utils::Logger::Info("[PPU]: CHR ROM data loaded into VRAM.");
-	}
-
-	bool PPU::IsFrameComplete()
-	{
-		if (frameComplete)
-		{
-			frameComplete = false;
-			return true;
-		}
-		return false;
 	}
 
 	const uint32_t* PPU::GetScreenBuffer() const

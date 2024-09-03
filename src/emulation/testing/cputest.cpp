@@ -6,7 +6,8 @@ namespace Emulation::Testing
         romReader(RomReader::Instance()), 
         memoryBus(MemoryBus::Instance()),
         cpu(CPU::Instance()),
-        exceptHandler(Utils::ExceptHandler::Instance())
+        exceptHandler(Utils::ExceptHandler::Instance()),
+        ppu(Graphics::PPU::Instance())
     { 
         Utils::Logger::Info("CPU Test init.");
     }
@@ -26,7 +27,8 @@ namespace Emulation::Testing
             std::stringstream lexerStream;
 
             //pc
-            for (int i = 0; i < 4; i++) {
+            for (int i = 0; i < 4; i++) 
+            {
                 lexerStream << line[i];
             }
 
@@ -59,12 +61,23 @@ namespace Emulation::Testing
             state.SP = (uint8_t)strtol(lexerStream.str().c_str(), &p, 16);;
             lexerStream.str("");
 
+            //dot
+            lexerStream << line.substr(78, 3);
+            state.dot = (uint16_t)strtol(lexerStream.str().c_str(), &p, 10);
+            lexerStream.str("");
+
+            //scanLine (PPU Scanline)
+            lexerStream << line.substr(82, 3);
+            state.scanLine = (uint16_t)strtol(lexerStream.str().c_str(), &p, 10);
+            lexerStream.str("");
+
             //cycle
-            for (int i = 90; i < line.length(); i++) {
+            for (int i = 90; i < line.length(); i++) 
+            {
                 lexerStream << line[i];
             }
 
-            state.CYC = (int)strtol(lexerStream.str().c_str(), &p, 10);;
+            state.Cycles = (int)strtol(lexerStream.str().c_str(), &p, 10);;
             lexerStream.str("");
 
             states.push_back(state);
@@ -97,7 +110,9 @@ namespace Emulation::Testing
                 " Y: ", Utils::Logger::Uint8ToHex(firstState.Y),
                 " SP: ", Utils::Logger::Uint8ToHex(firstState.SP),
                 " P: ", Utils::Logger::Uint8ToHex(firstState.P),
-                " CYC: ", firstState.CYC
+                " Dot: ", firstState.dot,
+                " ScanLine: ", firstState.scanLine,
+                " Cycles: ", firstState.Cycles
             );
 
             // Run the test
@@ -121,7 +136,9 @@ namespace Emulation::Testing
                     cpu.Y == expectedState.Y &&
                     cpu.SP == expectedState.SP &&
                     cpu.P == expectedState.P &&
-                    cpu.cycles == expectedState.CYC;
+                    cpu.cycles == expectedState.Cycles &&
+                    ppu.scanLine == expectedState.scanLine &&
+                    ppu.dot == expectedState.dot;
 
                 if (!stateMatch) {
                     if (cpu.PC != expectedState.PC)
@@ -154,10 +171,21 @@ namespace Emulation::Testing
                         Utils::Logger::Error("The P (Status) is mismatched, ours: ", static_cast<int>(cpu.P), " | nestest: ", static_cast<int>(expectedState.P));
                     }
 
-                    if (cpu.cycles != expectedState.CYC)
+                    if (cpu.cycles != expectedState.Cycles)
                     {
-                        Utils::Logger::Error("The Cycles is mismatched, ours: ", static_cast<int>(cpu.cycles), " | nestest: ", static_cast<int>(expectedState.CYC));
+                        Utils::Logger::Error("The Cycles is mismatched, ours: ", static_cast<int>(cpu.cycles), " | nestest: ", static_cast<int>(expectedState.Cycles));
                     }
+
+                    if (ppu.scanLine != expectedState.scanLine)
+                    {
+                        Utils::Logger::Error("The PPU ScanLine is mismatched, ours: ", static_cast<int>(ppu.scanLine), " | nestest: ", static_cast<int>(expectedState.scanLine));
+                    }
+
+                    if (ppu.dot != expectedState.dot)
+                    {
+                        Utils::Logger::Error("The PPU Dot is mismatched, ours: ", static_cast<int>(ppu.dot), " | nestest: ", static_cast<int>(expectedState.dot));
+                    }
+
 
                     std::cout << std::endl;
 
@@ -169,7 +197,9 @@ namespace Emulation::Testing
                         << " Y:" << static_cast<int>(expectedState.Y)
                         << " P:" << static_cast<int>(expectedState.P)
                         << " SP:" << static_cast<int>(expectedState.SP)
-                        << " CYC:" << expectedState.CYC << std::endl;
+                        << " ScanLine: " << expectedState.scanLine
+                        << " Dot: " << expectedState.dot
+                        << " Cycles:" << expectedState.Cycles << std::endl;
                     std::cout << "Actual:   "
                         << "PC:" << static_cast<int>(cpu.PC)
                         << " A:" << static_cast<int>(cpu.A)
@@ -177,7 +207,9 @@ namespace Emulation::Testing
                         << " Y:" << static_cast<int>(cpu.Y)
                         << " P:" << static_cast<int>(cpu.P)
                         << " SP:" << static_cast<int>(cpu.SP)
-                        << " CYC:" << cpu.cycles << std::endl;
+                        << " ScanLine: " << static_cast<int>(ppu.scanLine)
+                        << " Dot: " << static_cast<int>(ppu.dot)
+                        << " Cycles:" << cpu.cycles << std::endl;
                     problem = true;
 
                     break;

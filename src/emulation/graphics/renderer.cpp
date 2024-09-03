@@ -2,9 +2,7 @@
 
 namespace Emulation::Graphics
 {
-	Renderer::Renderer() : scaleFactor(3)
-    { 
-    }
+    Renderer::Renderer() : scaleFactor(3) { }
 
 	bool Renderer::InitSDL()
 	{

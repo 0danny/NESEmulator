@@ -48,11 +48,13 @@ namespace Emulation
 			if (isCPU && (address >= 0x2000 && address <= 0x4000))
 			{
 				ppuWriteCallback(address, value);
+				return;
 			}
 
 			if (address == 0x4016)
 			{
 				controller.Write(value);
+				return;
 			}
 
 			std::lock_guard<std::mutex> lock(mutex);

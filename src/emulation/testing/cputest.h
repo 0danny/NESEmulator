@@ -5,16 +5,20 @@
 #include "emulation/memorybus.h"
 #include "emulation/cpu.h"
 #include "utils/excepthandler.h"
+#include "emulation/graphics/ppu.h"
 
 #include <string>
 
 namespace Emulation::Testing
 {
-	struct CPUState {
+	struct CPUState 
+	{
 		uint16_t PC;
 		uint8_t A, X, Y, SP;
 		uint8_t P;
-		int CYC;
+		int Cycles;
+		uint16_t scanLine;
+		uint16_t dot;
 	};
 
 	class CPUTest
@@ -24,6 +28,7 @@ namespace Emulation::Testing
 
 		RomReader& romReader;
 		MemoryBus& memoryBus;
+		Graphics::PPU& ppu;
 		Utils::ExceptHandler& exceptHandler;
 		CPU& cpu;
 

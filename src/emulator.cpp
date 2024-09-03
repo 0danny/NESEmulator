@@ -13,7 +13,7 @@ namespace Core
         cpuTest(Testing::CPUTest::Instance()),
         controller(Controller::Instance())
     {
-        testMode = true;
+        testMode = false;
         showMonitor = true;
     } 
 
@@ -35,7 +35,7 @@ namespace Core
         }
 
         // Load ROM first.
-        if (romReader.LoadRom("games/pong.nes"))
+        if (romReader.LoadRom("games/donkeykongjr.nes"))
         {
             //Show header of loaded ROM.
             romReader.PrintHeader();
@@ -66,19 +66,34 @@ namespace Core
         return 0;
 	}
 
+    #include <chrono>
+    #include <thread>
+
     void Emulator::Loop()
     {
         while (!exceptHandler.HasException())
         {
             cpu.Clock();
 
-            if (ppu.IsFrameComplete())
+            if (ppu.frameComplete)
             {
+                ppu.frameComplete = false;
+
+                
+                    //Utils::Logger::Debug("Not in vblank, rendering. (Vblank: ", ppu.ppuStatus.vBlank, ")");
+
                 renderer.RenderFrame(ppu.GetScreenBuffer());
+                
+                
+                Utils::Logger::Debug("Frame processed , [Scanline ", ppu.scanLine, " , Dot ", ppu.dot, "]");
+
+                    
 
                 //Check for input.
                 controller.HandleInput();
             }
+
+            //std::this_thread::sleep_for(std::chrono::microseconds(1));
         }
 
         Utils::Logger::Error("FATAL - Fell out of clock loop.");
