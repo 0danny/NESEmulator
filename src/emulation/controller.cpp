@@ -64,7 +64,6 @@ namespace Emulation
         }
     }
 
-    // Function to handle reads from 0x4016
     uint8_t Controller::Read() 
     {
         //Utils::Logger::Info("Read called.");

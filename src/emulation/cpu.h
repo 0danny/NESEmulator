@@ -8,7 +8,6 @@
 #include "utils/excepthandler.h"
 #include "emulation/graphics/ppu.h"
 #include "emulation/memorybus.h"
-#include "monitor/window.h"
 #include "emulation/graphics/ppu.h"
 
 #define LOBYTE(w)           ((uint8_t)(w))
@@ -30,6 +29,8 @@
 
 namespace Emulation
 {
+	using PCCallback = std::function<void()>;
+
 	class CPU
 	{
 	public:
@@ -46,6 +47,8 @@ namespace Emulation
 		uint8_t P = 0;   // Status Register
 		int cycles = 0;
 
+		void RegisterPCCallback(PCCallback pcCallback);
+
 		static CPU& Instance()
 		{
 			static CPU INSTANCE;
@@ -56,6 +59,8 @@ namespace Emulation
 		Graphics::PPU& ppu;
 		MemoryBus& memoryBus;
 		Utils::ExceptHandler& exceptHandler;
+
+		PCCallback pcCallback;
 
 		uint16_t StackStart = 0x0100;
 

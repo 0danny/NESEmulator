@@ -5,7 +5,8 @@ namespace Emulation
 	CPU::CPU() :
 		memoryBus(MemoryBus::Instance()),
 		exceptHandler(Utils::ExceptHandler::Instance()),
-		ppu(Graphics::PPU::Instance())
+		ppu(Graphics::PPU::Instance()),
+		pcCallback(nullptr)
 	{
 		InitializeOpcodes();
 		Reset();
@@ -27,15 +28,11 @@ namespace Emulation
 	{
 		uint8_t opcode = Fetch();
 
-		auto& window = Monitor::Window::Instance();
-		auto& opcodeStruct = window.opcodeLookup[opcode];
-
 		auto& executeInstruction = opcodeTable[opcode];
 
 		if (executeInstruction)
 		{
-			//Utils::Logger::Info("[", Utils::Logger::Uint16ToHex(PC), "] OpCode [", opcodeStruct.name, "] (", Utils::Logger::Uint8ToHex(opcode), ")");
-
+			//Utils::Logger::Info("[", Utils::Logger::Uint16ToHex(PC), "] OpCode (", Utils::Logger::Uint8ToHex(opcode), ")");
 			executeInstruction();
 
 			if (ppu.triggeredNMI)
@@ -1095,5 +1092,10 @@ namespace Emulation
 		}
 
 		Utils::Logger::Info("-------------------------------------");
+	}
+
+	void CPU::RegisterPCCallback(PCCallback pcCallback)
+	{
+		this->pcCallback = std::move(pcCallback);
 	}
 }

@@ -1,9 +1,11 @@
 #include "window.h"
-#include "qapplication.h"
 
 namespace Monitor
 {
-	Window::Window() : app(nullptr), mainWindow(nullptr) { }
+    Window::Window() :
+        app(nullptr),
+        mainWindow(nullptr)
+    { }
 
 	void Window::Create(int argc, char* argv[])
 	{
@@ -14,65 +16,59 @@ namespace Monitor
 		mainWindow = new QMainWindow();
 		mainWindow->setWindowTitle("NES Emulator - CPU View");
 		mainWindow->resize(WND_WIDTH, WND_HEIGHT);
+
+        AddControls();
+        Run();
 	}
 
-    void Window::AddControls(const std::vector<uint8_t>& prgRom)
+    void Window::AddControls()
     {
-        QListWidget* listBox = new QListWidget(mainWindow);
+        QWidget* centralWidget = new QWidget(mainWindow);
+        QVBoxLayout* mainLayout = new QVBoxLayout(centralWidget);
 
-        listBox->setGeometry(0, 0, WND_WIDTH, WND_HEIGHT);
+        QSplitter* topSplitter = new QSplitter(Qt::Horizontal);
 
-        QFont font = listBox->font();
-        font.setPointSize(14);
-        listBox->setFont(font);
+        // Disassembler panel
+        auto& disam = Disassembler::Instance();        
 
-        mainWindow->setCentralWidget(listBox);
+        topSplitter->addWidget(disam.Create());
 
-        Utils::Logger::Info("[Monitor]: PRG-ROM size - ", prgRom.size());
+        // Register panel
+        QListWidget* registerPanel = new QListWidget();
+        registerPanel->addItem("Register Status...");
+        topSplitter->addWidget(registerPanel);
 
-        // Get the reset vector (last two bytes of PRG-ROM)
-        uint16_t resetVectorAddr = prgRom.size() - 4;
-        uint16_t resetVector = prgRom[resetVectorAddr] | (prgRom[resetVectorAddr + 1] << 8);
+        topSplitter->setStretchFactor(0, 3);
+        topSplitter->setStretchFactor(1, 1);
 
-        size_t i = resetVector - 0x8000;
-        while (i < prgRom.size())
-        {
-            uint16_t address = i + 0x8000;  // Add 0x8000 to get the actual NES address
-            uint8_t opcode = prgRom[i];
-            auto it = opcodeLookup.find(opcode);
+        QSplitter* bottomSplitter = new QSplitter(Qt::Horizontal);
 
-            if (it != opcodeLookup.end())
-            {
-                std::stringstream ss;
-                ss << Utils::Logger::Uint16ToHex(address) << " | ";
-                ss << it->second.name;
+        // Memory dump panel
+        QListWidget* memoryDumpPanel = new QListWidget();
+        memoryDumpPanel->addItem("Memory Dump...");
+        bottomSplitter->addWidget(memoryDumpPanel);
 
-                if (it->second.operandSize == 1)
-                {
-                    ss << " " << Utils::Logger::Uint8ToHex(prgRom[i + it->second.operandSize]);
-                }
+        // Stack panel
+        QListWidget* stackPanel = new QListWidget();
+        stackPanel->addItem("Stack View...");
+        bottomSplitter->addWidget(stackPanel);
 
-                if (it->second.operandSize == 2)
-                {
-                    ss << " " << Utils::Logger::Uint16ToHex(prgRom[i + (it->second.operandSize - 1)] | prgRom[i + it->second.operandSize] << 8);
-                }
-               
-                listBox->addItem(QString::fromStdString(ss.str()));
+        bottomSplitter->setStretchFactor(0, 3);
+        bottomSplitter->setStretchFactor(1, 2); // Less space to stack view
 
-                // Move to the next opcode
-                i += (1 + it->second.operandSize);
-            }
-            else
-            {
-                Utils::Logger::Info("[Monitor]: Breaking at unknown opcode - ", Utils::Logger::Uint8ToHex(opcode));
-                break;
-            }
-        }
+        mainLayout->addWidget(topSplitter);
+        mainLayout->addWidget(bottomSplitter);
+
+        mainLayout->setStretch(0, 3);
+        mainLayout->setStretch(1, 2);
+
+        centralWidget->setLayout(mainLayout);
+        mainWindow->setCentralWidget(centralWidget);
     }
 
 	void Window::Run()
 	{
-		//mainWindow->show();
+		mainWindow->show();
 
 		if (app)
 		{

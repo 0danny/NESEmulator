@@ -40,11 +40,34 @@ namespace Emulation::Graphics
 
 	uint8_t PPU::ReadVRAM(uint16_t addr) const
 	{
+		// Handle palette memory mirroring
+		if (addr >= 0x3F00 && addr <= 0x3FFF)
+		{
+			addr = 0x3F00 + (addr % 32);  // Palette is mirrored every 32 bytes
+			if (addr == 0x3F10) addr = 0x3F00; // Mirror $3F10 to $3F00
+			if (addr == 0x3F14) addr = 0x3F04; // Mirror $3F14 to $3F04
+			if (addr == 0x3F18) addr = 0x3F08; // Mirror $3F18 to $3F08
+			if (addr == 0x3F1C) addr = 0x3F0C; // Mirror $3F1C to $3F0C
+			return paletteTable[addr - 0x3F00]; // Palette address space starts at $3F00
+		}
+
 		return vram[addr % VRAM_SIZE];
 	}
 
 	void PPU::WriteVRAM(uint16_t addr, uint8_t value)
 	{
+		// Handle palette memory mirroring
+		if (addr >= 0x3F00 && addr <= 0x3FFF)
+		{
+			addr = 0x3F00 + (addr % 32);  // Palette is mirrored every 32 bytes
+			if (addr == 0x3F10) addr = 0x3F00; // Mirror $3F10 to $3F00
+			if (addr == 0x3F14) addr = 0x3F04; // Mirror $3F14 to $3F04
+			if (addr == 0x3F18) addr = 0x3F08; // Mirror $3F18 to $3F08
+			if (addr == 0x3F1C) addr = 0x3F0C; // Mirror $3F1C to $3F0C
+			paletteTable[addr - 0x3F00] = value; // Write to the palette table
+			return;
+		}
+
 		vram[addr % VRAM_SIZE] = value;
 	}
 
@@ -92,8 +115,7 @@ namespace Emulation::Graphics
 			break;
 
 		case 6: //PPUADDR
-			Utils::Logger::Debug("CPU Writing to PPU ADDR [Scanline ", scanLine, ", Dot ", dot, "] (Vblank: ", ppuStatus.vBlank, ")");
-
+			//Utils::Logger::Debug("CPU Writing to PPU ADDR [Scanline ", scanLine, ", Dot ", dot, "] (Vblank: ", ppuStatus.vBlank, ")");
 
 			if (writeToggle == 0)
 			{
@@ -112,7 +134,7 @@ namespace Emulation::Graphics
 			break;
 
 		case 7:  //PPUDATA
-			Utils::Logger::Debug("CPU Writing to PPU DATA [Scanline ", scanLine, ", Dot ", dot, "] (Vblank: ", ppuStatus.vBlank, ")");
+			//Utils::Logger::Debug("CPU Writing to PPU DATA [Scanline ", scanLine, ", Dot ", dot, "] (Vblank: ", ppuStatus.vBlank, ")");
 
 			WriteVRAM(vramAddr, value);
 			vramAddr += ppuCtrl.vramAddressIncrement ? 32 : 1;
@@ -137,16 +159,21 @@ namespace Emulation::Graphics
 		case 1: //PPUMASK
 			return ppuMask.val;
 
-		case 2: //PPUSTATUS
+		case 2: { //PPUSTATUS
 			//Utils::Logger::Debug("We are saying to the CPU (Vblank: ", ppuStatus.vBlank, ")", " [Scanline ", scanLine, ", Dot ", dot, "]");
-			return ppuStatus.val;
+			uint8_t copy = ppuStatus.val;
+
+			ppuStatus.vBlank = 0;
+
+			return copy;
+		}
 
 		case 3: //OAMADDR
 			return oamAddr;
 
 		case 4: //OAMDATA
-
 			break;
+
 		case 7: { //PPUDATA
 			// Store the value in the buffer from the previous read (simulating the delayed read behavior of the PPU)
 			ppuReadBuffer = ppuReadBufferCpy;
@@ -154,8 +181,7 @@ namespace Emulation::Graphics
 			// If the current VRAM address points to the palette memory range (0x3F00 - 0x3FFF)
 			if (vramAddr >= 0x3F00 && vramAddr <= 0x3FFF)
 			{
-				// Pre-fetch the mirrored value from VRAM and store it in the secondary buffer
-				ppuReadBufferCpy = ReadVRAM(vramAddr - 0x1000);
+				ppuReadBufferCpy = ReadVRAM(vramAddr - 0x1000); // Mirror to the name table space
 
 				// Apply the greyscale filter if the corresponding bit in ppumask is set
 				ppuReadBuffer = ppuMask.greyScale ? (ReadVRAM(vramAddr) & 0x30) : ReadVRAM(vramAddr);
@@ -166,6 +192,7 @@ namespace Emulation::Graphics
 				ppuReadBufferCpy = ReadVRAM(vramAddr);
 			}
 
+			// Increment the VRAM address according to the increment mode set in PPUCTRL
 			vramAddr += ppuCtrl.vramAddressIncrement ? 32 : 1;
 			return ppuReadBuffer;
 		}
@@ -201,20 +228,9 @@ namespace Emulation::Graphics
 	inline void PPU::PreRender()
 	{
 		//clear vbl flag and sprite overflow
-		if (dot == 2)
-		{
-			pixelIndex = 0;
+		
 
-			ppuStatus.vBlank = 0;
-			ppuStatus.spriteOverflow = 0;
-			ppuStatus.spriteZeroHit = 0;
-		}
-
-		//copy vertical bits
-		if (dot >= 280 && dot <= 304)
-		{
-			CopyVerticalBits();
-		}
+		
 	}
 
 	//scanLine >= 240 && scanLine <= 260
@@ -241,12 +257,25 @@ namespace Emulation::Graphics
 
 	void PPU::Clock()
 	{
+		if (scanLine == 260 && dot == 330)
+		{
+			pixelIndex = 0;
+
+			ppuStatus.vBlank = 0;
+			ppuStatus.spriteOverflow = 0;
+			ppuStatus.spriteZeroHit = 0;
+		}
+
 		if ((scanLine >= 0 && scanLine <= 239) || scanLine == 261) 
 		{  
 			//visible scanline, pre-render scanline
-			if (scanLine == 261) 
+			if (scanLine == 261)
 			{
-				PreRender();
+				//copy vertical bits
+				if (dot >= 280 && dot <= 304)
+				{
+					CopyVerticalBits();
+				}
 			}
 
 			if (scanLine >= 0 && scanLine <= 239) 
@@ -329,9 +358,9 @@ namespace Emulation::Graphics
 		uint8_t p = ppuMask.greyScale ? (pindex & 0x30) : pindex;
 
 		//Dark border rect to hide seam of scroll, and other glitches that may occur
-		if (dot <= 9 || dot >= 249 || scanLine <= 7 || scanLine >= 232) 
+		if (dot >= 249 || scanLine >= 240) 
 		{
-			p = 13;
+			//p = 13;
 		}
 
 		screenBuffer[pixelIndex++] = palette[p];
@@ -432,9 +461,7 @@ namespace Emulation::Graphics
 	void PPU::ReloadShiftersAndShift() 
 	{
 		if (IsRenderingDisabled()) 
-		{
 			return;
-		}
 
 		bgShiftRegLo <<= 1;
 		bgShiftRegHi <<= 1;

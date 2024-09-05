@@ -58,6 +58,22 @@ namespace Utils {
             return ss.str();
         }
 
+        static std::string Uint8ToHexUppercase(uint8_t value) {
+            std::stringstream ss;
+            ss << std::uppercase  // Make the output uppercase
+                << std::hex << std::setw(2) << std::setfill('0')
+                << static_cast<int>(value);
+            return ss.str();
+        }
+
+        static std::string Uint16ToHexUppercase(uint16_t value) {
+            std::stringstream ss;
+            ss << std::uppercase  // Make the output uppercase
+                << std::hex << std::setw(4) << std::setfill('0')
+                << static_cast<int>(value);
+            return ss.str();
+        }
+
     private:
         static void Log(LogLevel level, const std::string& message) {
             std::lock_guard<std::mutex> lock(mutex);

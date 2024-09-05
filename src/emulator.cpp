@@ -14,12 +14,12 @@ namespace Core
         controller(Controller::Instance())
     {
         testMode = false;
-        showMonitor = true;
+        showMonitor = false;
     } 
 
 	int Emulator::Start(int argc, char* argv[])
 	{
-        Utils::Logger::Info("The emulator is starting...");
+        Utils::Logger::Info("The emulator is starting..., [Monitor? - ", showMonitor, "] ");
 
         if (testMode)
         {
@@ -34,8 +34,10 @@ namespace Core
             return -1;
         }
 
-        // Load ROM first.
-        if (romReader.LoadRom("games/donkeykongjr.nes"))
+        //games/donkeykongjr.nes
+        //games/test/palette_ram.nes
+        //Load ROM first.
+        if (romReader.LoadRom("games/pong.nes"))
         {
             //Show header of loaded ROM.
             romReader.PrintHeader();
@@ -44,19 +46,26 @@ namespace Core
             memoryBus.LoadPrgProgram(romReader.GetPRGRom());
             ppu.LoadCHRProgram(romReader.GetCHRRom());
 
-            cpu.Reset(); //Reset the CPU to ensure we load the correct vector.
+            //Reset the CPU to ensure we load the correct vector.
+            cpu.Reset();
 
-            // Start Clock thread
-            clockThread = std::thread(&Emulator::Loop, this);
-            Utils::Logger::Info("Clock thread started - ", clockThread.get_id());
-
+            //If we are using the monitor, we have to start the clock in a seperate thread.
             if (showMonitor)
             {
+                // Start Clock thread
+                clockThread = std::thread(&Emulator::Loop, this);
+
                 //Create monitor window.
+                //The disassembler needs a reference to the RAM.
+
                 monitor.Create(argc, argv);
-                monitor.AddControls(romReader.GetPRGRom());
-                monitor.Run();
             }
+            else
+            {
+                Loop();
+            }
+
+            Utils::Logger::Info("Cleaning up....");
 
             //Cleanup
             clockThread.join();
@@ -66,11 +75,10 @@ namespace Core
         return 0;
 	}
 
-    #include <chrono>
-    #include <thread>
-
     void Emulator::Loop()
     {
+        Utils::Logger::Info("Clock thread started - ", clockThread.get_id());
+
         while (!exceptHandler.HasException())
         {
             cpu.Clock();
@@ -78,18 +86,9 @@ namespace Core
             if (ppu.frameComplete)
             {
                 ppu.frameComplete = false;
-
                 
-                    //Utils::Logger::Debug("Not in vblank, rendering. (Vblank: ", ppu.ppuStatus.vBlank, ")");
-
                 renderer.RenderFrame(ppu.GetScreenBuffer());
-                
-                
-                Utils::Logger::Debug("Frame processed , [Scanline ", ppu.scanLine, " , Dot ", ppu.dot, "]");
 
-                    
-
-                //Check for input.
                 controller.HandleInput();
             }
 

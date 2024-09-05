@@ -8,7 +8,6 @@
 #include "utils/excepthandler.h"
 #include "emulation/controller.h"
 
-
 namespace Emulation
 {
 	using PPUWriteCallback = std::function<void(uint16_t address, uint8_t value)>;
@@ -20,8 +19,6 @@ namespace Emulation
 		PPUWriteCallback ppuWriteCallback;
 		PPUReadCallback ppuReadCallback;
 
-		static constexpr size_t RAM_SIZE = 65536; // 64KB of RAM
-		std::array<uint8_t, RAM_SIZE> ram;
 		mutable std::mutex mutex;
 
 		//Singletons
@@ -31,6 +28,11 @@ namespace Emulation
 		MemoryBus();
 
 	public:
+		static constexpr size_t RAM_SIZE = 65536; // 64KB of RAM
+
+		//For monitor, its not ideal
+		std::array<uint8_t, RAM_SIZE> ram;
+
 		// Singleton access
 		static MemoryBus& Instance() 
 		{

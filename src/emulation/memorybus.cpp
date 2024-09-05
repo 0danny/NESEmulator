@@ -51,8 +51,10 @@ namespace Emulation
 				return;
 			}
 
-			if (address == 0x4016)
+			if (address == 0x4016 || address == 0x4017)
 			{
+				//Utils::Logger::Debug("Writing to Controller Address: ", Utils::Logger::Uint16ToHex(address), " Value: ", Utils::Logger::Uint8ToHex(value));
+
 				controller.Write(value);
 				return;
 			}
