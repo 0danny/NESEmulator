@@ -20,8 +20,8 @@ namespace Emulation
 		}
 		else
 		{
-			//PPU registers are mirrored every 8 bytes until 0x4000.
-			if (isCPU && ((address >= 0x2000 && address <= 0x4000) || address == 0x4014))
+			//PPU registers are mirrored every 8 bytes until 0x3FFF.
+			if (isCPU && (address >= 0x2000 && address <= 0x3FFF))
 			{
 				return ppuReadCallback(address);
 			}
@@ -45,16 +45,14 @@ namespace Emulation
 		}
 		else
 		{
-			if (isCPU && ((address >= 0x2000 && address <= 0x4000) || address == 0x4014))
+			if (isCPU && ((address >= 0x2000 && address <= 0x3FFF) || address == 0x4014))
 			{
 				ppuWriteCallback(address, value);
 				return;
 			}
 
-			if (address == 0x4016 || address == 0x4017)
+			if (address == 0x4016)
 			{
-				//Utils::Logger::Debug("Writing to Controller Address: ", Utils::Logger::Uint16ToHex(address), " Value: ", Utils::Logger::Uint8ToHex(value));
-
 				controller.Write(value);
 				return;
 			}

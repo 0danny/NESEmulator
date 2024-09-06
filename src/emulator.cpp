@@ -28,16 +28,10 @@ namespace Core
             return 0;
         }
 
-        if (!renderer.InitSDL())
-        {
-            Utils::Logger::Error("Failed to initialize SDL!");
-            return -1;
-        }
-
         //games/donkeykongjr.nes
         //games/test/palette_ram.nes
         //Load ROM first.
-        if (romReader.LoadRom("games/duckhunt.nes"))
+        if (romReader.LoadRom("games/pong.nes"))
         {
             //Show header of loaded ROM.
             romReader.PrintHeader();
@@ -60,18 +54,31 @@ namespace Core
             }
             else
             {
+                if (!renderer.InitSDL())
+                {
+                    Utils::Logger::Error("Failed to initialize SDL!");
+                    return -1;
+                }
+
                 Loop();
             }
 
-            Utils::Logger::Info("Cleaning up....");
-
-            //Cleanup
-            clockThread.join();
-            renderer.Cleanup();
+            Cleanup();
         }
 
         return 0;
 	}
+
+    void Emulator::Cleanup()
+    {
+        Utils::Logger::Info("Cleaning up emulator....");
+
+        //Cleanup
+        if (showMonitor)
+            clockThread.join();
+
+        renderer.Cleanup();
+    }
 
     void Emulator::Loop()
     {

@@ -8,7 +8,6 @@
 #include "utils/excepthandler.h"
 #include "emulation/graphics/ppu.h"
 #include "emulation/memorybus.h"
-#include "emulation/graphics/ppu.h"
 
 #define LOBYTE(w)           ((uint8_t)(w))
 #define HIBYTE(w)           ((uint8_t)(((uint16_t)(w) >> 8) & 0xFF))

@@ -52,6 +52,8 @@ namespace Emulation::Graphics
 
     void Renderer::Cleanup()
     {
+        Utils::Logger::Info("SDL windowed is being cleaned up...");
+
         SDL_DestroyTexture(texture);
         SDL_DestroyRenderer(renderer);
         SDL_DestroyWindow(window);

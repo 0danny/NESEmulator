@@ -38,14 +38,15 @@ namespace Core
 
 		bool testMode;
 		bool showMonitor;
-
-		Emulator();
-
 		std::thread clockThread;
 
-	public:
-		int Start(int argc, char* argv[]);
+		void Cleanup();
 		void Loop();
+
+	public:
+		Emulator();
+
+		int Start(int argc, char* argv[]);
 
 		static Emulator& Instance()
 		{

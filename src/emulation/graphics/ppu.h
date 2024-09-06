@@ -1,85 +1,26 @@
 #pragma once
 #include "utils/logger.h"
 #include "emulation/memorybus.h"
+
 #include <array>
 #include <cstdint>
 
 namespace Emulation::Graphics
 {
-    struct SpriteData
-    {
-        uint8_t yCoordinate;
-        uint8_t tileIndex;
-        uint8_t attributes;
-        uint8_t xCoordinate;
-        uint8_t id;
-    };
-
-    struct SpriteRenderEntity 
-    {
-        uint8_t lo;
-        uint8_t hi;
-        uint8_t attr;
-        uint8_t counter;
-        uint8_t id;
-        bool flipHorizontally;
-        bool flipVertically;
-        int shifted = 0;
-
-        void shift() {
-            if (shifted == 8) {
-                return;
-            }
-
-            if (flipHorizontally) {
-                lo >>= 1;
-                hi >>= 1;
-            }
-            else {
-                lo <<= 1;
-                hi <<= 1;
-            }
-
-            shifted++;
-        }
-    };
-
     class PPU
     {
     public:
         PPU();
 
-        int scanLine;
-        int dot;
-
         void Clock();
-        void EvaluateSprites();
-        uint16_t GetSpritePatternAddress(const SpriteData& sprite, bool flipVertically);
-        bool IsUninit(const SpriteData& sprite);
-        bool InYRange(const SpriteData& oam);
-        void EmitPixel();
         void LoadCHRProgram(const std::vector<uint8_t>& chrRom);
         const uint32_t* GetScreenBuffer() const;
-        void PPUWriteCallback(uint16_t address, uint8_t value);
-        void FetchSpritePatterns();
-        uint8_t PPUReadCallback(uint16_t address);
 
         bool triggeredNMI = false;
-        bool frameComplete;
-        bool dontShow = false;
+        bool frameComplete = false;
 
-        //$2002 PPUSTATUS
-        union {
-            struct
-            {
-                unsigned leastSignificantBits : 5;
-                unsigned spriteOverflow : 1;
-                unsigned spriteZeroHit : 1;
-                unsigned vBlank : 1;
-            };
-
-            uint8_t val;
-        } ppuStatus;
+        int scanLine = 0;
+        int dot = 0;
 
         static PPU& Instance()
         {
@@ -89,41 +30,24 @@ namespace Emulation::Graphics
 
     private:
         MemoryBus& memoryBus;
+
         static constexpr size_t VRAM_SIZE = 0x4000; // 16 KB VRAM
+
+        // PPU register addresses
+        static constexpr uint16_t PPUCTRL = 0;
+        static constexpr uint16_t PPUMASK = 1;
+        static constexpr uint16_t PPUSTATUS = 2;
+        static constexpr uint16_t OAMADDR = 3;
+        static constexpr uint16_t OAMDATA = 4;
+        static constexpr uint16_t PPUSCROLL = 5;
+        static constexpr uint16_t PPUADDR = 6;
+        static constexpr uint16_t PPUDATA = 7;
 
         // PPU memory (VRAM)
         std::array<uint8_t, VRAM_SIZE> vram;
-        std::array<uint8_t, 32> paletteTable;
-        std::array<SpriteData, 64> oam;
-        std::array<SpriteData, 8> secondaryOam;
-
-        uint8_t sprite_palette[16] = { 0 };
-        uint8_t spritePatternLowAddr, spritePatternHighAddr;
-        int primaryOAMCursor = 0;
-        int secondaryOAMCursor = 0;
-        SpriteData secondaryOAM[8];
-        SpriteData tmpOAM;
-        bool inRange = false;
-        int inRangeCycles = 8;
-        int spriteHeight = 8;
-        std::vector<SpriteRenderEntity> spriteRenderEntities;
-        SpriteRenderEntity out;
-
-
         std::array<uint32_t, 256 * 240> screenBuffer;
 
-        // Internal state variables
-        uint8_t ppuStatusCpy = 0;
-
-        uint16_t vramAddr;
-        uint16_t tempAddr;
-        uint8_t fineX;
-        bool writeToggle;
-
-        uint8_t ppuReadBuffer = 0;
-        uint8_t ppuReadBufferCpy = 0;
-
-        int pixelIndex = 0;
+        std::array<uint8_t, 256> primaryOam;
 
 
         uint32_t palette[64] = {
@@ -136,20 +60,22 @@ namespace Emulation::Graphics
             4293717740, 4289252588, 4290559212, 4292129516, 4293701356, 4293701332, 4293702832, 4293182608,
             4291613304, 4290043512, 4289258128, 4288209588, 4288730852, 4288717472, 4278190080, 4278190080 };
 
+        // Memory Mapped Registers
+
         //$2000 PPUCTRL
         union {
             struct
             {
-                unsigned baseNametableAddress : 2;
-                unsigned vramAddressIncrement : 1;
-                unsigned spritePatternTableAddress : 1;
-                unsigned bgPatternTableAddress : 1;
-                unsigned spriteSize : 1;
-                unsigned ppuMasterSlaveSelect : 1;
-                unsigned generateNMI : 1;
+                unsigned nametableSelect : 2;
+                unsigned vramIncrementMode : 1;
+                unsigned spriteTileSelect : 1;
+                unsigned bgTileSelect : 1;
+                unsigned spriteHeight : 1;
+                unsigned ppuMasterSlave : 1;
+                unsigned nmiEnable : 1;
             };
 
-            uint8_t val;
+            uint8_t val = 0;
         } ppuCtrl;
 
         //$2001 PPUMASK
@@ -157,8 +83,8 @@ namespace Emulation::Graphics
             struct
             {
                 unsigned greyScale : 1;
-                unsigned showBgLeftmost8 : 1;
-                unsigned showSpritesLeftmost8 : 1;
+                unsigned showBgLeftColumn : 1;
+                unsigned showSpriteLeftColumn : 1;
                 unsigned showBg : 1;
                 unsigned showSprites : 1;
                 unsigned emphasizeRed : 1;
@@ -166,49 +92,55 @@ namespace Emulation::Graphics
                 unsigned emphasizeBlue : 1;
             };
 
-            uint8_t val;
+            uint8_t val = 0;
         } ppuMask;
 
-       
+        //$2002 PPUSTATUS
+        union {
+            struct
+            {
+                unsigned leastSignificantBits : 5;
+                unsigned spriteOverflow : 1;
+                unsigned spriteZeroHit : 1;
+                unsigned vBlank : 1;
+            };
+
+            uint8_t val = 0;
+        } ppuStatus;
 
         uint8_t oamAddr = 0;    //$2003
         uint8_t oamData = 0;    //$2004
-        uint8_t ppuScroll = 0;  //$2005
+        uint8_t oamDma = 0;  //$4014
 
-        uint8_t ntbyte, attrbyte, patternlow, patternhigh;
-        uint16_t bgShiftRegLo;
-        uint16_t bgShiftRegHi;
-        uint16_t attrShiftReg1;
-        uint16_t attrShiftReg2;
-        uint8_t quadrant_num;
+        uint8_t readBuffer = 0;
+
+        //Internal Registers
+        
+        // 15-bit registers (v and t)
+        uint16_t vramAddr = 0;  // Current VRAM address (15 bits)
+        uint16_t tempAddr = 0;  // Temporary VRAM address (15 bits)
+
+        // 3-bit register (x)
+        uint8_t fineX = 0;   // Fine X scroll (3 bits)
+
+        // 1-bit flag (w)
+        bool writeToggle = false;      // Write toggle (1 bit)
 
         uint8_t ReadVRAM(uint16_t addr) const;
         void WriteVRAM(uint16_t addr, uint8_t value);
 
-        void CopyOAM(uint8_t oamEntry, int index);
-
-        uint8_t ReadOAM(int index);
-
-        // PPU register addresses
-        static constexpr uint16_t PPUCTRL = 0x2000;
-        static constexpr uint16_t PPUMASK = 0x2001;
-        static constexpr uint16_t PPUSTATUS = 0x2002;
-        static constexpr uint16_t OAMADDR = 0x2003;
-        static constexpr uint16_t OAMDATA = 0x2004;
-        static constexpr uint16_t PPUSCROLL = 0x2005;
-        static constexpr uint16_t PPUADDR = 0x2006;
-        static constexpr uint16_t PPUDATA = 0x2007;
+        // Clocking
+        void PreRender();
+        void Rendering();
+        void Vblank();
 
         void FetchTiles();
+        void EmitPixel();
 
-        void XIncrement();
-        void YIncrement();
+        void PPUWriteCallback(uint16_t address, uint8_t value);
+        uint8_t PPUReadCallback(uint16_t address);
 
-        bool IsRenderingDisabled();
-        void CopyVerticalBits();
-        void PreRender();
-        void PostRender();
-        void CopyHorizontalBits();
-        void ReloadShiftersAndShift();
+        void IncrementVRAMAddr();
+        bool ForcedBlanking();
     };
 }

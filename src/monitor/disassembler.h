@@ -260,7 +260,7 @@ namespace Monitor
             {0x07, {"SLO", 1}},
             {0x17, {"SLO", 1}},
             {0x0F, {"SLO", 2}},
-            {0x1F, {"SLO", 2}},
+            {0x1F, {"SLO", 2}}, 
             {0x1B, {"SLO", 2}},
             {0x03, {"SLO", 1}},
             {0x27, {"RLA", 1}},

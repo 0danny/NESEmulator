@@ -2,27 +2,12 @@
 
 namespace Emulation::Graphics
 {
-	PPU::PPU() :
-		memoryBus(MemoryBus::Instance()),
-		vramAddr(0),
-		tempAddr(0),
-		fineX(0),
-		writeToggle(0),
-		scanLine(0),
-		dot(0),
-		attrShiftReg1(0),
-		attrShiftReg2(0),
-		attrbyte(0),
-		bgShiftRegHi(0),
-		bgShiftRegLo(0),
-		ntbyte(0),
-		patternhigh(0),
-		patternlow(0)
+	PPU::PPU() : memoryBus(MemoryBus::Instance())
 	{
+		//Arrays
 		vram.fill(0);
-		paletteTable.fill(0);
 		screenBuffer.fill(0);
-		frameComplete = false;
+		primaryOam.fill(0);
 
 		memoryBus.RegisterPPUReadCallback([this](uint16_t address) -> uint8_t
 			{
@@ -39,15 +24,16 @@ namespace Emulation::Graphics
 
 	uint8_t PPU::ReadVRAM(uint16_t addr) const
 	{
-		// Handle palette memory mirroring
+		// Mirror nametables: addresses $3000 - $3EFF mirror $2000 - $2EFF
+		if (addr >= 0x3000 && addr < 0x3F00)
+		{
+			addr -= 0x1000;
+		}
+
+		// Palette mirroring: addresses $3F20, $3F40, etc., are mirrors of $3F00 - $3F1F
 		if (addr >= 0x3F00 && addr <= 0x3FFF)
 		{
-			addr = 0x3F00 + (addr % 32);  // Palette is mirrored every 32 bytes
-			if (addr == 0x3F10) addr = 0x3F00; // Mirror $3F10 to $3F00
-			if (addr == 0x3F14) addr = 0x3F04; // Mirror $3F14 to $3F04
-			if (addr == 0x3F18) addr = 0x3F08; // Mirror $3F18 to $3F08
-			if (addr == 0x3F1C) addr = 0x3F0C; // Mirror $3F1C to $3F0C
-			return paletteTable[addr - 0x3F00]; // Palette address space starts at $3F00
+			addr = 0x3F00 + (addr % 0x20);
 		}
 
 		return vram[addr % VRAM_SIZE];
@@ -55,63 +41,124 @@ namespace Emulation::Graphics
 
 	void PPU::WriteVRAM(uint16_t addr, uint8_t value)
 	{
-		// Handle palette memory mirroring
+		// Mirror nametables: addresses $3000 - $3EFF mirror $2000 - $2EFF
+		if (addr >= 0x3000 && addr < 0x3F00)
+		{
+			addr -= 0x1000;
+		}
+
+		// Palette mirroring: addresses $3F20, $3F40, etc., are mirrors of $3F00 - $3F1F
 		if (addr >= 0x3F00 && addr <= 0x3FFF)
 		{
-			addr = 0x3F00 + (addr % 32);  // Palette is mirrored every 32 bytes
-			if (addr == 0x3F10) addr = 0x3F00; // Mirror $3F10 to $3F00
-			if (addr == 0x3F14) addr = 0x3F04; // Mirror $3F14 to $3F04
-			if (addr == 0x3F18) addr = 0x3F08; // Mirror $3F18 to $3F08
-			if (addr == 0x3F1C) addr = 0x3F0C; // Mirror $3F1C to $3F0C
-			paletteTable[addr - 0x3F00] = value; // Write to the palette table
-			return;
+			addr = 0x3F00 + (addr % 0x20);
 		}
 
 		vram[addr % VRAM_SIZE] = value;
 	}
 
-	void PPU::CopyOAM(uint8_t oamEntry, int index)
+	inline void PPU::PreRender()
 	{
-		int oamSelect = index / 4;
-		int property = index % 4;
+		if (dot == 0)
+		{
+			frameComplete = true;
+		}
 
-		if (property == 0)
+		if (dot == 1)
 		{
-			oam[oamSelect].yCoordinate = oamEntry;
+			// Clear the vBlank flag and sprite zero hit
+			ppuStatus.vBlank = 0;
+			ppuStatus.spriteZeroHit = 0;
+			ppuStatus.spriteOverflow = 0;  // Clear sprite overflow as well
 		}
-		else if (property == 1)
+
+		if (dot >= 280 && dot <= 304)
 		{
-			oam[oamSelect].tileIndex = oamEntry;
+			//Vertical Scroll Bits Reloaded
 		}
-		else if (property == 2)
+
+		if (dot == 341)
 		{
-			oam[oamSelect].attributes = oamEntry;
-		}
-		else {
-			oam[oamSelect].xCoordinate = oamEntry;
+			scanLine = 0;
 		}
 	}
 
-	uint8_t PPU::ReadOAM(int index)
+	inline void PPU::Rendering()
 	{
-		int oamSelect = index / 4;
-		int property = index % 4;
+		//Visible scanlines
+		if (dot >= 1 && dot <= 256)
+		{
+			FetchTiles();
+			EmitPixel();
+		}
 
-		if (property == 0)
+		if (dot >= 257 && dot <= 320)
 		{
-			return oam[oamSelect].yCoordinate;
+			//FetchSpriteData();
 		}
-		else if (property == 1)
+
+		if (dot >= 321 && dot <= 336)
 		{
-			return oam[oamSelect].tileIndex;
+			//LoadShiftRegisters();
 		}
-		else if (property == 2)
+	}
+
+	inline void PPU::Vblank()
+	{
+		if (dot == 1 && scanLine == 241)
 		{
-			return oam[oamSelect].attributes;
+			ppuStatus.vBlank = 1;
+			
+			if (ppuCtrl.nmiEnable)
+			{
+				triggeredNMI = true;
+			}
 		}
-		else {
-			return oam[oamSelect].xCoordinate;
+	}
+
+	void PPU::FetchTiles()
+	{
+		
+	}
+
+	void PPU::EmitPixel()
+	{
+		
+	}
+
+
+	void PPU::Clock()
+	{
+		//Utils::Logger::Debug("Scanline -> ", scanLine, " Dots -> ", dot);
+
+		if (scanLine == 261)
+		{
+			PreRender();
 		}
+
+		if (scanLine >= 0 && scanLine <= 239)
+		{
+			Rendering();
+		}
+
+		if (scanLine == 240)
+		{
+			//Idling.
+		}
+
+		//VBlank
+		if (scanLine >= 241 && scanLine <= 260)
+		{
+			Vblank();
+		}
+
+		// Each scanline lasts for 341 ppu clock cycles.
+		if (dot == 341)
+		{
+			scanLine += 1;
+			dot = 0;
+		}
+		else
+			dot++;
 	}
 
 	void PPU::PPUWriteCallback(uint16_t address, uint8_t value)
@@ -122,8 +169,7 @@ namespace Emulation::Graphics
 		{
 
 		case 0: //PPUCTRL
-			tempAddr = (tempAddr & 0xF3FF) | (((uint16_t)value & 0x03) << 10);
-			spriteHeight = (value & 0x20) ? 16 : 8;
+
 			ppuCtrl.val = value;
 			break;
 
@@ -131,79 +177,88 @@ namespace Emulation::Graphics
 			ppuMask.val = value;
 			break;
 
-		case 3: //OAMADDR
+		case 3: //OAMADDR 
 			oamAddr = value;
 			break;
 
-		case 4: //OAMDATA
-			CopyOAM(value, oamAddr++);
+		case 4: { //OAMDATA
+			primaryOam[oamAddr] = value;
+
+			//Increment OAM after write.
+			oamAddr += 1;
 
 			break;
+		}
 
 		case 5: //PPUSCROLL
-			if (writeToggle == 0)
+			if (writeToggle)
 			{
-				tempAddr &= 0x7FE0;
-				tempAddr |= ((uint16_t)value) >> 3;
-				fineX = value & 7;
-				writeToggle = 1;
+				//First Write (Horizontal Scroll Position)
+
+				fineX = (value & 0x07);  // Store fine X (3 bits from the lower part of the data)
+				tempAddr = (tempAddr & 0x7FE0) | ((value >> 3) & 0x1F);  // Coarse X (5 bits)
+
+				writeToggle = 0;
 			}
 			else
 			{
-				tempAddr &= ~0x73E0;
-				tempAddr |= ((uint16_t)value & 0x07) << 12;
-				tempAddr |= ((uint16_t)value & 0xF8) << 2;
-				writeToggle = 0;
+				//Second Write (Vertical Scroll Position)
+				//Bits 12 - 14: Fine Y (3 bits)
+				//Bits 5 - 9: Coarse Y (5 bits)
+
+				tempAddr = (tempAddr & 0xC1F) | ((value & 0x07) << 12) | ((value >> 3) & 0x03E0);  // Fine Y, Coarse Y
+
+				writeToggle = 1;
 			}
 
-			ppuScroll = value;
 			break;
 
 		case 6: //PPUADDR
-			//Utils::Logger::Debug("CPU Writing to PPU ADDR [Scanline ", scanLine, ", Dot ", dot, "] (Vblank: ", ppuStatus.vBlank, ")");
-
-			if (writeToggle == 0)
+			if (address == 0x4014)
 			{
-				tempAddr &= 255;
-				tempAddr |= ((uint16_t)value & 0x3F) << 8;
-				writeToggle = 1;
+				Utils::Logger::Info("Initiating a OAM DMA write to page -> ", Utils::Logger::Uint8ToHex(value));
+
+				//OAM DMA (Direct Memory Access)
+				uint16_t baseAddr = value * 0x100;  // Base address for DMA transfer in CPU memory
+
+				// Perform the DMA transfer (copy 256 bytes from CPU memory to OAM)
+				for (int i = 0; i < 256; ++i) 
+				{
+					primaryOam[oamAddr] = memoryBus.Read(baseAddr + i);  // Transfer data to OAM
+					oamAddr++;  // Increment OAM address
+				}
+
+				//We are meant to be stalling the CPU here.
+
+				break;
+			}
+
+			if (writeToggle)
+			{
+				//Upper byte first.
+				tempAddr = (tempAddr & 0x00FF) | ((value & 0x3F) << 8);  // Masking to ensure only 6 bits are used for the upper byte
+
+				writeToggle = 0;
 			}
 			else
 			{
-				tempAddr &= 0xFF00;
-				tempAddr |= value;
-				vramAddr = tempAddr;
+				//Lower byte second.
+				tempAddr = (tempAddr & 0xFF00) | value;  // Fill the lower byte
+				vramAddr = tempAddr;  // After the second write, the address is updated
 
-				writeToggle = 0;
+				writeToggle = 1;
 			}
 			break;
 
 		case 7:  //PPUDATA
-			//Utils::Logger::Debug("CPU Writing to PPU DATA [Scanline ", scanLine, ", Dot ", dot, "] (Vblank: ", ppuStatus.vBlank, ")");
-
 			WriteVRAM(vramAddr, value);
-			vramAddr += ppuCtrl.vramAddressIncrement ? 32 : 1;
+
+			IncrementVRAMAddr();
 			break;
 
 		default:
 			Utils::Logger::Info("CPU Writing to invalid PPU register - ", Utils::Logger::Uint8ToHex(reg));
 			break;
-		}
-	}
-
-	void PPU::FetchSpritePatterns()
-	{
-		if (IsRenderingDisabled())
-		{
-			return;
-		}
-
-		for (auto& sprite : spriteRenderEntities)
-		{
-			if (sprite.counter > 0)
-			{
-				sprite.counter--;
-			}
 		}
 	}
 
@@ -214,540 +269,58 @@ namespace Emulation::Graphics
 		switch (reg)
 		{
 
-		case 0: //PPUCTRL
-			return ppuCtrl.val;
-
-		case 1: //PPUMASK
-			return ppuMask.val;
-
 		case 2: { //PPUSTATUS
-			//Utils::Logger::Debug("We are saying to the CPU (Vblank: ", ppuStatus.vBlank, ")", " [Scanline ", scanLine, ", Dot ", dot, "]");
-			uint8_t copy = ppuStatus.val;
+			uint8_t ppuStatusCopy = ppuStatus.val;
 
+			//VBlank is cleared on PPUSTATUS read.
 			ppuStatus.vBlank = 0;
+
 			writeToggle = 0;
 
-			return copy;
+			return ppuStatusCopy;
 		}
 
-		case 3: //OAMADDR
-			return oamAddr;
-
-		case 4: //OAMDATA
-			return ReadOAM(oamAddr);
+		case 4: { //OAMDATA
+			return primaryOam[oamAddr];
+		}
 
 		case 7: { //PPUDATA
-			// Store the value in the buffer from the previous read (simulating the delayed read behavior of the PPU)
-			ppuReadBuffer = ppuReadBufferCpy;
+			uint8_t returnValue = readBuffer;
 
-			// If the current VRAM address points to the palette memory range (0x3F00 - 0x3FFF)
-			if (vramAddr >= 0x3F00 && vramAddr <= 0x3FFF)
+			// Palette memory is handled immediately, no buffer delay
+			if (vramAddr >= 0x3F00 && vramAddr <= 0x3FFF) 
 			{
-				ppuReadBufferCpy = ReadVRAM(vramAddr - 0x1000); // Mirror to the name table space
-
-				// Apply the greyscale filter if the corresponding bit in ppumask is set
-				ppuReadBuffer = ppuMask.greyScale ? (ReadVRAM(vramAddr) & 0x30) : ReadVRAM(vramAddr);
+				returnValue = ReadVRAM(vramAddr);
 			}
-			else
-			{
-				// For non-palette memory, store the current VRAM value in the secondary buffer
-				ppuReadBufferCpy = ReadVRAM(vramAddr);
+			else {
+				// Return the buffered value, then update the buffer with current VRAM data
+				readBuffer = ReadVRAM(vramAddr);
 			}
 
-			// Increment the VRAM address according to the increment mode set in PPUCTRL
-			vramAddr += ppuCtrl.vramAddressIncrement ? 32 : 1;
-			return ppuReadBuffer;
+			// Increment the VRAM address based on PPUCTRL's increment mode
+			IncrementVRAMAddr();
+
+			return returnValue;
 		}
 
 		default:
 			Utils::Logger::Info("CPU Reading from invalid PPU register - ", Utils::Logger::Uint8ToHex(reg));
-			break;
 		}
 	}
 
-	bool PPU::IsRenderingDisabled()
+	void PPU::IncrementVRAMAddr()
+	{
+		if (ppuCtrl.vramIncrementMode == 0)
+			//Going across
+			vramAddr += 1;
+		else
+			//Going down
+			vramAddr += 32;
+	}
+
+	bool PPU::ForcedBlanking()
 	{
 		return !ppuMask.showBg && !ppuMask.showSprites;
-	}
-
-	void PPU::CopyHorizontalBits()
-	{
-		if (IsRenderingDisabled())
-			return;
-
-		vramAddr = (vramAddr & ~0x41F) | (tempAddr & 0x41F);
-	}
-
-	void PPU::CopyVerticalBits()
-	{
-		if (IsRenderingDisabled())
-			return;
-
-		vramAddr = (vramAddr & ~0x7BE0) | (tempAddr & 0x7BE0);
-	}
-
-	//scanLine == 261
-	inline void PPU::PreRender()
-	{
-		//clear vbl flag and sprite overflow
-		if (dot == 2)
-		{
-			pixelIndex = 0;
-
-			ppuStatus.vBlank = 0;
-			ppuStatus.spriteOverflow = 0;
-			ppuStatus.spriteZeroHit = 0;
-		}
-
-		//copy vertical bits
-		if (dot >= 280 && dot <= 304)
-		{
-			CopyVerticalBits();
-		}
-	}
-
-	//scanLine >= 240 && scanLine <= 260
-	inline void PPU::PostRender()
-	{
-		//post-render, vblank
-		if (scanLine == 240 && dot == 0)
-		{
-			frameComplete = true;
-		}
-
-		if (scanLine == 241 && dot == 1)
-		{
-			//set vbl flag
-			ppuStatus.vBlank = 1;
-
-			//flag for nmi
-			if (ppuCtrl.generateNMI)
-			{
-				triggeredNMI = true;
-			}
-		}
-	}
-
-	void PPU::Clock()
-	{
-		if ((scanLine >= 0 && scanLine <= 239) || scanLine == 261)
-		{
-			//visible scanline, pre-render scanline
-			if (scanLine == 261)
-			{
-				PreRender();
-			}
-
-			if (scanLine >= 0 && scanLine <= 239)
-			{
-				EvaluateSprites();
-			}
-
-			if (dot == 257)
-			{
-				CopyHorizontalBits();
-			}
-
-			//main hook: fetch tiles, emit pixel, shift
-			if ((dot >= 1 && dot <= 257) || (dot >= 321 && dot <= 337))
-			{
-				//reload shift registers and shift
-				if ((dot >= 2 && dot <= 257) || (dot >= 322 && dot <= 337))
-				{
-					ReloadShiftersAndShift();
-				}
-
-				if (scanLine >= 0 && scanLine <= 239)
-				{
-					if (dot >= 2 && dot <= 257)
-					{
-						if (scanLine > 0)
-						{
-							FetchSpritePatterns();
-						}
-
-						EmitPixel();
-					}
-				}
-
-				//fetch nt, at, pattern low - high
-				FetchTiles();
-			}
-		}
-		else if (scanLine >= 240 && scanLine <= 260)
-			PostRender();
-
-
-		if (dot == 340)
-		{
-			scanLine = (scanLine + 1) % 262;
-			dot = 0;
-		}
-		else
-			dot++;
-
-		//Utils::Logger::Info("Scanline - ", scanline, " | Cycle - ", cycle);
-	}
-
-	void PPU::EvaluateSprites()
-	{
-		//clear secondary OAM
-		if (dot >= 1 && dot <= 64) {
-			if (dot == 1) {
-				secondaryOAMCursor = 0;
-			}
-
-			secondaryOAM[secondaryOAMCursor].attributes = 0xFF;
-			secondaryOAM[secondaryOAMCursor].tileIndex = 0xFF;
-			secondaryOAM[secondaryOAMCursor].xCoordinate = 0xFF;
-			secondaryOAM[secondaryOAMCursor].yCoordinate = 0xFF;
-
-			if (dot % 8 == 0) {
-				secondaryOAMCursor++;
-			}
-		}
-
-		//sprite eval
-		if (dot >= 65 && dot <= 256) {
-			//Init
-			if (dot == 65) {
-				secondaryOAMCursor = 0;
-				primaryOAMCursor = 0;
-			}
-
-			if (secondaryOAMCursor == 8) {
-				//ppustatus |= 0x20;
-				return;
-			}
-
-			if (primaryOAMCursor == 64) {
-				return;
-			}
-
-			//odd cycle read
-			if ((dot % 2) == 1) {
-				tmpOAM = oam[primaryOAMCursor];
-
-				if (InYRange(tmpOAM))
-				{
-					inRangeCycles--;
-					inRange = true;
-				}
-				//even cycle write
-			}
-			else {
-				//tmpOAM is in range, write it to secondaryOAM
-				if (inRange) {
-					inRangeCycles--;
-
-					//copying tmpOAM in range is 8 cycles, 2 cycles otherwise
-					if (inRangeCycles == 0) {
-						primaryOAMCursor++;
-						secondaryOAMCursor++;
-						inRangeCycles = 8;
-						inRange = false;
-					}
-					else {
-						tmpOAM.id = primaryOAMCursor;
-						secondaryOAM[secondaryOAMCursor] = tmpOAM;
-					}
-				}
-				else {
-					primaryOAMCursor++;
-				}
-			}
-		}
-
-		//Sprite fetches
-		if (dot >= 257 && dot <= 320) {
-			if (dot == 257) {
-				secondaryOAMCursor = 0;
-				spriteRenderEntities.clear();
-			}
-
-			SpriteData sprite = secondaryOAM[secondaryOAMCursor];
-
-			int cycle = (dot - 1) % 8;
-
-			switch (cycle)
-			{
-			case 0:
-			case 1:
-				if (!IsUninit(sprite)) {
-					out = SpriteRenderEntity();
-				}
-
-				break;
-
-			case 2:
-				if (!IsUninit(sprite)) {
-					out.attr = sprite.attributes;
-					out.flipHorizontally = sprite.attributes & 64;
-					out.flipVertically = sprite.attributes & 128;
-					out.id = sprite.id;
-				}
-				break;
-
-			case 3:
-				if (!IsUninit(sprite)) {
-					out.counter = sprite.xCoordinate;
-				}
-				break;
-
-			case 4:
-				if (!IsUninit(sprite)) {
-					spritePatternLowAddr = GetSpritePatternAddress(sprite, out.flipVertically);
-					out.lo = ReadVRAM(spritePatternLowAddr);
-				}
-				break;
-
-			case 5:
-				break;
-
-			case 6:
-				if (!IsUninit(sprite)) {
-					spritePatternHighAddr = spritePatternLowAddr + 8;
-					out.hi = ReadVRAM(spritePatternHighAddr);
-				}
-				break;
-
-			case 7:
-				if (!IsUninit(sprite)) {
-					spriteRenderEntities.push_back(out);
-				}
-
-				secondaryOAMCursor++;
-				break;
-
-			default:
-				break;
-			}
-		}
-	}
-
-	uint16_t PPU::GetSpritePatternAddress(const SpriteData& sprite, bool flipVertically)
-	{
-		uint16_t addr = 0;
-
-		int fineOffset = scanLine - sprite.yCoordinate;
-
-		if (flipVertically) {
-			fineOffset = spriteHeight - 1 - fineOffset;
-		}
-
-		//By adding 8 to fineOffset we skip the high order bits
-		if (spriteHeight == 16 && fineOffset >= 8) {
-			fineOffset += 8;
-		}
-
-		if (spriteHeight == 8) {
-			addr = ((uint16_t)ppuCtrl.spritePatternTableAddress << 12) |
-				((uint16_t)sprite.tileIndex << 4) |
-				fineOffset;
-		}
-		else {
-			addr = (((uint16_t)sprite.tileIndex & 1) << 12) |
-				((uint16_t)((sprite.tileIndex & ~1) << 4)) |
-				fineOffset;
-		}
-
-
-		return addr;
-	}
-
-	bool PPU::IsUninit(const SpriteData& sprite)
-	{
-		return ((sprite.attributes == 0xFF) && (sprite.tileIndex == 0xFF) && (sprite.xCoordinate == 0xFF) && (sprite.yCoordinate == 0xFF)) || ((sprite.xCoordinate == 0) && (sprite.yCoordinate == 0) && (sprite.attributes == 0) && (sprite.tileIndex == 0));
-	}
-
-	bool PPU::InYRange(const SpriteData& oam) {
-		return !IsUninit(oam) && ((scanLine >= oam.yCoordinate) && (scanLine < (oam.yCoordinate + spriteHeight)));
-	}
-
-
-	void PPU::EmitPixel()
-	{
-		if (IsRenderingDisabled())
-		{
-			pixelIndex++;
-			return;
-		}
-
-		//Bg
-		uint16_t fineSelect = 0x8000 >> fineX;
-		uint16_t pixel1 = (bgShiftRegLo & fineSelect) << fineX;
-		uint16_t pixel2 = (bgShiftRegHi & fineSelect) << fineX;
-		uint16_t pixel3 = (attrShiftReg1 & fineSelect) << fineX;
-		uint16_t pixel4 = (attrShiftReg2 & fineSelect) << fineX;
-		uint8_t bgBit12 = (pixel2 >> 14) | (pixel1 >> 15);
-
-		//Sprites
-		uint8_t spritePixel1 = 0;
-		uint8_t spritePixel2 = 0;
-		uint8_t spritePixel3 = 0;
-		uint8_t spritePixel4 = 0;
-		uint8_t spriteBit12 = 0;
-		uint8_t paletteIndex = 0 | (pixel4 >> 12) | (pixel3 >> 13) | (pixel2 >> 14) | (pixel1 >> 15);
-		uint8_t spritePaletteIndex = 0;
-		bool showSprite = false;
-		bool spriteFound = false;
-
-		for (auto& sprite : spriteRenderEntities)
-		{
-			if (sprite.counter == 0 && sprite.shifted != 8) {
-				if (spriteFound) {
-					sprite.shift();
-					continue;
-				}
-
-				spritePixel1 = sprite.flipHorizontally ? ((sprite.lo & 1) << 7) : sprite.lo & 128;
-				spritePixel2 = sprite.flipHorizontally ? ((sprite.hi & 1) << 7) : sprite.hi & 128;
-				spritePixel3 = sprite.attr & 1;
-				spritePixel4 = sprite.attr & 2;
-				spriteBit12 = (spritePixel2 >> 6) | (spritePixel1 >> 7);
-
-				//Sprite zero hit
-				if (!ppuStatus.spriteZeroHit && spriteBit12 && bgBit12 && sprite.id == 0 && ppuMask.showSprites && ppuMask.showBg && dot < 256)
-				{
-					ppuStatus.val |= 64;
-				}
-
-				if (spriteBit12) {
-					showSprite = ((bgBit12 && !(sprite.attr & 32)) || !bgBit12) && ppuMask.showSprites;
-					spritePaletteIndex = 0x10 | (spritePixel4 << 2) | (spritePixel3 << 2) | spriteBit12;
-					spriteFound = true;
-				}
-
-				sprite.shift();
-			}
-		}
-
-		//When bg rendering is off
-		if (!ppuMask.showBg)
-		{
-			paletteIndex = 0;
-		}
-
-		uint8_t pindex = ReadVRAM(0x3F00 | (showSprite ? spritePaletteIndex : paletteIndex)) % 64;
-		//Handling grayscale mode
-		uint8_t p = ppuMask.greyScale ? (pindex & 0x30) : pindex;
-
-
-
-		screenBuffer[pixelIndex++] = palette[p];
-	}
-
-	void PPU::FetchTiles()
-	{
-		if (IsRenderingDisabled())
-			return;
-
-		int cycle = dot % 8;
-
-		//Fetch nametable byte
-		if (cycle == 1)
-		{
-			ntbyte = ReadVRAM(0x2000 | (vramAddr & 0x0FFF));
-			//Fetch attribute byte, also calculate which quadrant of the attribute byte is active
-		}
-		else if (cycle == 3)
-		{
-			attrbyte = ReadVRAM(0x23C0 | (vramAddr & 0x0C00) | ((vramAddr >> 4) & 0x38) | ((vramAddr >> 2) & 0x07));
-			quadrant_num = (((vramAddr & 2) >> 1) | ((vramAddr & 64) >> 5)) * 2;
-			//Get low order bits of background tile
-		}
-		else if (cycle == 5)
-		{
-			uint16_t patterAddr =
-				((uint16_t)ppuCtrl.bgPatternTableAddress << 12) +
-				((uint16_t)ntbyte << 4) +
-				((vramAddr & 0x7000) >> 12);
-
-			patternlow = ReadVRAM(patterAddr);
-			//Get high order bits of background tile
-		}
-		else if (cycle == 7)
-		{
-			uint16_t patterAddr =
-				((uint16_t)ppuCtrl.bgPatternTableAddress << 12) +
-				((uint16_t)ntbyte << 4) +
-				((vramAddr & 0x7000) >> 12) + 8;
-
-			patternhigh = ReadVRAM(patterAddr);
-			//Change columns, change rows
-		}
-		else if (cycle == 0)
-		{
-			if (dot == 256)
-			{
-				YIncrement();
-			}
-
-			XIncrement();
-		}
-	}
-
-	void PPU::XIncrement()
-	{
-		if ((vramAddr & 0x001F) == 31)
-		{
-			vramAddr &= ~0x001F;
-			vramAddr ^= 0x0400;
-		}
-		else
-		{
-			vramAddr += 1;
-		}
-	}
-
-	void PPU::YIncrement()
-	{
-		if ((vramAddr & 0x7000) != 0x7000)
-		{
-			vramAddr += 0x1000;
-		}
-		else
-		{
-			vramAddr &= ~0x7000;
-			int y = (vramAddr & 0x03E0) >> 5;
-
-			if (y == 29)
-			{
-				y = 0;
-				vramAddr ^= 0x0800;
-			}
-			else if (y == 31)
-			{
-				y = 0;
-			}
-			else
-			{
-				y += 1;
-			}
-
-			vramAddr = (vramAddr & ~0x03E0) | (y << 5);
-		}
-	}
-
-	void PPU::ReloadShiftersAndShift()
-	{
-		if (IsRenderingDisabled())
-			return;
-
-		bgShiftRegLo <<= 1;
-		bgShiftRegHi <<= 1;
-		attrShiftReg1 <<= 1;
-		attrShiftReg2 <<= 1;
-
-		if (dot % 8 == 1)
-		{
-			uint8_t attr_bits1 = (attrbyte >> quadrant_num) & 1;
-			uint8_t attr_bits2 = (attrbyte >> quadrant_num) & 2;
-			attrShiftReg1 |= attr_bits1 ? 255 : 0;
-			attrShiftReg2 |= attr_bits2 ? 255 : 0;
-			bgShiftRegLo |= patternlow;
-			bgShiftRegHi |= patternhigh;
-		}
 	}
 
 	void PPU::LoadCHRProgram(const std::vector<uint8_t>& chrRom)

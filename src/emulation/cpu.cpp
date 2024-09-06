@@ -38,6 +38,7 @@ namespace Emulation
 			if (ppu.triggeredNMI)
 			{
 				NMI();
+
 				ppu.triggeredNMI = false;
 			}
 		}
