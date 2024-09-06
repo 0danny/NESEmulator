@@ -37,7 +37,7 @@ namespace Core
         //games/donkeykongjr.nes
         //games/test/palette_ram.nes
         //Load ROM first.
-        if (romReader.LoadRom("games/pong.nes"))
+        if (romReader.LoadRom("games/duckhunt.nes"))
         {
             //Show header of loaded ROM.
             romReader.PrintHeader();
@@ -56,8 +56,6 @@ namespace Core
                 clockThread = std::thread(&Emulator::Loop, this);
 
                 //Create monitor window.
-                //The disassembler needs a reference to the RAM.
-
                 monitor.Create(argc, argv);
             }
             else

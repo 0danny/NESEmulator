@@ -6,6 +6,44 @@
 
 namespace Emulation::Graphics
 {
+    struct SpriteData
+    {
+        uint8_t yCoordinate;
+        uint8_t tileIndex;
+        uint8_t attributes;
+        uint8_t xCoordinate;
+        uint8_t id;
+    };
+
+    struct SpriteRenderEntity 
+    {
+        uint8_t lo;
+        uint8_t hi;
+        uint8_t attr;
+        uint8_t counter;
+        uint8_t id;
+        bool flipHorizontally;
+        bool flipVertically;
+        int shifted = 0;
+
+        void shift() {
+            if (shifted == 8) {
+                return;
+            }
+
+            if (flipHorizontally) {
+                lo >>= 1;
+                hi >>= 1;
+            }
+            else {
+                lo <<= 1;
+                hi <<= 1;
+            }
+
+            shifted++;
+        }
+    };
+
     class PPU
     {
     public:
@@ -15,10 +53,15 @@ namespace Emulation::Graphics
         int dot;
 
         void Clock();
+        void EvaluateSprites();
+        uint16_t GetSpritePatternAddress(const SpriteData& sprite, bool flipVertically);
+        bool IsUninit(const SpriteData& sprite);
+        bool InYRange(const SpriteData& oam);
         void EmitPixel();
         void LoadCHRProgram(const std::vector<uint8_t>& chrRom);
         const uint32_t* GetScreenBuffer() const;
         void PPUWriteCallback(uint16_t address, uint8_t value);
+        void FetchSpritePatterns();
         uint8_t PPUReadCallback(uint16_t address);
 
         bool triggeredNMI = false;
@@ -51,7 +94,22 @@ namespace Emulation::Graphics
         // PPU memory (VRAM)
         std::array<uint8_t, VRAM_SIZE> vram;
         std::array<uint8_t, 32> paletteTable;
-        std::array<uint8_t, 256> oam;
+        std::array<SpriteData, 64> oam;
+        std::array<SpriteData, 8> secondaryOam;
+
+        uint8_t sprite_palette[16] = { 0 };
+        uint8_t spritePatternLowAddr, spritePatternHighAddr;
+        int primaryOAMCursor = 0;
+        int secondaryOAMCursor = 0;
+        SpriteData secondaryOAM[8];
+        SpriteData tmpOAM;
+        bool inRange = false;
+        int inRangeCycles = 8;
+        int spriteHeight = 8;
+        std::vector<SpriteRenderEntity> spriteRenderEntities;
+        SpriteRenderEntity out;
+
+
         std::array<uint32_t, 256 * 240> screenBuffer;
 
         // Internal state variables
@@ -126,6 +184,10 @@ namespace Emulation::Graphics
 
         uint8_t ReadVRAM(uint16_t addr) const;
         void WriteVRAM(uint16_t addr, uint8_t value);
+
+        void CopyOAM(uint8_t oamEntry, int index);
+
+        uint8_t ReadOAM(int index);
 
         // PPU register addresses
         static constexpr uint16_t PPUCTRL = 0x2000;

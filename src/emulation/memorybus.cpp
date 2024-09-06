@@ -21,7 +21,7 @@ namespace Emulation
 		else
 		{
 			//PPU registers are mirrored every 8 bytes until 0x4000.
-			if (isCPU && (address >= 0x2000 && address <= 0x4000))
+			if (isCPU && ((address >= 0x2000 && address <= 0x4000) || address == 0x4014))
 			{
 				return ppuReadCallback(address);
 			}
@@ -45,7 +45,7 @@ namespace Emulation
 		}
 		else
 		{
-			if (isCPU && (address >= 0x2000 && address <= 0x4000))
+			if (isCPU && ((address >= 0x2000 && address <= 0x4000) || address == 0x4014))
 			{
 				ppuWriteCallback(address, value);
 				return;
