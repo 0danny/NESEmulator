@@ -31,7 +31,7 @@ namespace Core
         //games/donkeykongjr.nes
         //games/test/palette_ram.nes
         //Load ROM first.
-        if (romReader.LoadRom("games/pong.nes"))
+        if (romReader.LoadRom("games/donkeykongjr.nes"))
         {
             //Show header of loaded ROM.
             romReader.PrintHeader();

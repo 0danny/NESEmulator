@@ -24,36 +24,33 @@ namespace Emulation::Graphics
 
 	uint8_t PPU::ReadVRAM(uint16_t addr) const
 	{
-		// Mirror nametables: addresses $3000 - $3EFF mirror $2000 - $2EFF
-		if (addr >= 0x3000 && addr < 0x3F00)
-		{
-			addr -= 0x1000;
-		}
-
-		// Palette mirroring: addresses $3F20, $3F40, etc., are mirrors of $3F00 - $3F1F
-		if (addr >= 0x3F00 && addr <= 0x3FFF)
-		{
-			addr = 0x3F00 + (addr % 0x20);
-		}
-
-		return vram[addr % VRAM_SIZE];
+		return vram[MirrorAddress(addr) % VRAM_SIZE];
 	}
 
 	void PPU::WriteVRAM(uint16_t addr, uint8_t value)
+	{
+		if (addr >= 0x2000 && addr <= 0x3EFF)
+		{
+			Utils::Logger::Debug("Writing to nametable...");
+		}
+
+		vram[MirrorAddress(addr) % VRAM_SIZE] = value;
+	}
+
+	uint16_t PPU::MirrorAddress(uint16_t addr) const
 	{
 		// Mirror nametables: addresses $3000 - $3EFF mirror $2000 - $2EFF
 		if (addr >= 0x3000 && addr < 0x3F00)
 		{
 			addr -= 0x1000;
 		}
+			
 
 		// Palette mirroring: addresses $3F20, $3F40, etc., are mirrors of $3F00 - $3F1F
 		if (addr >= 0x3F00 && addr <= 0x3FFF)
-		{
 			addr = 0x3F00 + (addr % 0x20);
-		}
 
-		vram[addr % VRAM_SIZE] = value;
+		return addr;
 	}
 
 	inline void PPU::PreRender()
@@ -71,9 +68,16 @@ namespace Emulation::Graphics
 			ppuStatus.spriteOverflow = 0;  // Clear sprite overflow as well
 		}
 
+		if (dot == 257)
+		{
+			//Horizontal Scroll Bits Copied
+			CopyHorizontal();
+		}
+
 		if (dot >= 280 && dot <= 304)
 		{
-			//Vertical Scroll Bits Reloaded
+			//Vertical Scroll Bits Copied
+			CopyVertical();
 		}
 
 		if (dot == 341)
@@ -88,6 +92,7 @@ namespace Emulation::Graphics
 		if (dot >= 1 && dot <= 256)
 		{
 			FetchTiles();
+
 			EmitPixel();
 		}
 
@@ -117,14 +122,141 @@ namespace Emulation::Graphics
 
 	void PPU::FetchTiles()
 	{
-		
+		if (dot % 8 == 1)
+		{
+			// Load shift registers with the data fetched during the previous scanline
+			bgShiftRegister[0] = (bgShiftRegister[0] & 0xFF00) | bgNextTileLsb;
+			bgShiftRegister[1] = (bgShiftRegister[1] & 0xFF00) | bgNextTileMsb;
+
+			bgAttributeShiftRegister[0] = (bgAttributeShiftRegister[0] & 0xFF00) | ((bgNextTileAttribute & 0x01) ? 0xFF : 0x00);
+			bgAttributeShiftRegister[1] = (bgAttributeShiftRegister[1] & 0xFF00) | ((bgNextTileAttribute & 0x02) ? 0xFF : 0x00);
+		}
+
+		switch (dot % 8)
+		{
+		case 1: // Nametable byte
+			bgNextTileId = ReadVRAM(0x2000 | (vramAddr & 0x0FFF));
+			break;
+		case 3: // Attribute table byte
+			bgNextTileAttribute = ReadVRAM(GetAttributeAddress());
+			break;
+		case 5: // Background tile low byte
+			bgNextTileLsb = ReadVRAM(GetBackgroundPatternAddress(bgNextTileId));
+			break;
+		case 7: // Background tile high byte
+			bgNextTileMsb = ReadVRAM(GetBackgroundPatternAddress(bgNextTileId) + 8);
+			break;
+		}
+
+		// Shift background registers
+		if (ppuMask.showBg)
+		{
+			bgShiftRegister[0] <<= 1;
+			bgShiftRegister[1] <<= 1;
+			bgAttributeShiftRegister[0] <<= 1;
+			bgAttributeShiftRegister[1] <<= 1;
+		}
 	}
 
 	void PPU::EmitPixel()
 	{
-		
+		uint8_t bgPixel = 0;
+		uint8_t paletteIndex = 0;
+
+		// Calculate current tile coordinates in the name table
+		int tileX = (dot - 1) / 8;   // Each tile is 8 pixels wide
+		int tileY = scanLine / 8;    // Each tile is 8 pixels tall
+
+		// Make sure we stay within the bounds of the first name table
+		if (tileX < 32 && tileY < 30)
+		{
+			// Calculate the address of the current tile in the name table ($2000)
+			uint16_t nameTableAddress = 0x2000 + (tileY * 32 + tileX);
+
+			//Utils::Logger::Debug("Nametable Address -> ", Utils::Logger::Uint16ToHex(nameTableAddress));
+
+			// Get the tile ID from the name table
+			uint8_t tileId = ReadVRAM(nameTableAddress);
+
+			//Utils::Logger::Debug("Tile ID -> ", Utils::Logger::Uint8ToHex(tileId));
+
+			// Calculate the address of the tile pattern in the pattern table
+			uint16_t patternTableAddress = GetBackgroundPatternAddress(tileId);
+
+			// Fetch the tile pixel data based on the fine Y within the tile
+			int fineY = scanLine % 8;
+			uint8_t tileLsb = ReadVRAM(patternTableAddress + fineY);        // Low byte of the tile pattern
+			uint8_t tileMsb = ReadVRAM(patternTableAddress + fineY + 8);    // High byte of the tile pattern
+
+			// Calculate the fine X position within the tile (bitwise)
+			int fineX = (dot - 1) % 8;
+			uint8_t pixelBit = 7 - fineX;
+
+			// Extract the pixel value (0-3) from the tile pattern
+			uint8_t pixel0 = (tileLsb >> pixelBit) & 0x01;
+			uint8_t pixel1 = (tileMsb >> pixelBit) & 0x01;
+			bgPixel = (pixel1 << 1) | pixel0;
+
+			// Get the attribute table byte for this 32x32 pixel area
+			uint16_t attributeAddress = 0x23C0 | (nameTableAddress & 0x0C00) | ((nameTableAddress >> 4) & 0x38) | ((nameTableAddress >> 2) & 0x07);
+			uint8_t attributeByte = ReadVRAM(attributeAddress);
+
+			// Determine which quadrant of the 32x32 tile area we're in
+			int quadrant = ((tileY & 0x02) << 1) | (tileX & 0x02);
+			uint8_t paletteBits = (attributeByte >> quadrant) & 0x03;
+
+			// Combine palette bits with the pixel value to get the final palette index
+			paletteIndex = (paletteBits << 2) | bgPixel;
+		}
+
+		// Get the color from the palette
+		uint8_t colorIndex = ReadVRAM(0x3F00 + paletteIndex);
+
+		// Set the pixel in the screen buffer
+		int x = dot - 1;
+		int y = scanLine;
+
+		if (x >= 0 && x < 256 && y > 0 && y < 240)
+		{
+			screenBuffer[y * 256 + x] = palette[colorIndex & 0x3F];
+		}
 	}
 
+	uint16_t PPU::GetBackgroundPatternAddress(uint8_t tileId)
+	{
+		return ppuCtrl.bgTileSelect ? 0x1000 + (tileId * 16) : (tileId * 16);
+	}
+
+	uint16_t PPU::GetAttributeAddress()
+	{
+		return 0x23C0 | (vramAddr & 0x0C00) | ((vramAddr >> 4) & 0x38) | ((vramAddr >> 2) & 0x07);
+	}
+
+	uint8_t PPU::GetColorFromPaletteRam(uint8_t palette, uint8_t pixel)
+	{
+		if (pixel == 0)
+			return ReadVRAM(0x3F00);
+		else
+			return ReadVRAM(0x3F00 + (palette << 2) + pixel);
+	}
+
+	void PPU::CopyHorizontal()
+	{
+		if (!ForcedBlanking())
+		{
+			// Copy horizontal bits
+			vramAddr = (vramAddr & ~0x041F) | (tempAddr & 0x041F);
+		}
+	}
+
+	void PPU::CopyVertical()
+	{
+		if (!ForcedBlanking())
+		{
+			// Copy vertical bits
+			vramAddr = (vramAddr & ~0x7BE0) | (tempAddr & 0x7BE0);
+		}
+	}
 
 	void PPU::Clock()
 	{
@@ -233,24 +365,25 @@ namespace Emulation::Graphics
 				break;
 			}
 
-			if (writeToggle)
+			if (writeToggle == 0)
 			{
 				//Upper byte first.
 				tempAddr = (tempAddr & 0x00FF) | ((value & 0x3F) << 8);  // Masking to ensure only 6 bits are used for the upper byte
-
-				writeToggle = 0;
+				writeToggle = 1;
 			}
 			else
 			{
 				//Lower byte second.
 				tempAddr = (tempAddr & 0xFF00) | value;  // Fill the lower byte
 				vramAddr = tempAddr;  // After the second write, the address is updated
-
-				writeToggle = 1;
+				writeToggle = 0;  // Reset the toggle for the next PPUADDR write
 			}
+
 			break;
 
 		case 7:  //PPUDATA
+			Utils::Logger::Debug("Writing to -> ", Utils::Logger::Uint16ToHex(vramAddr));
+
 			WriteVRAM(vramAddr, value);
 
 			IncrementVRAMAddr();

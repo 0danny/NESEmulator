@@ -126,8 +126,18 @@ namespace Emulation::Graphics
         // 1-bit flag (w)
         bool writeToggle = false;      // Write toggle (1 bit)
 
+        // New members for background rendering
+        uint16_t bgShiftRegister[2] = { 0 };  // Background pattern table shift registers
+        uint8_t bgAttributeShiftRegister[2] = { 0 };  // Background attribute shift registers
+        uint8_t bgNextTileId = 0;
+        uint8_t bgNextTileAttribute = 0;
+        uint8_t bgNextTileLsb = 0;
+        uint8_t bgNextTileMsb = 0;
+
         uint8_t ReadVRAM(uint16_t addr) const;
         void WriteVRAM(uint16_t addr, uint8_t value);
+
+        uint16_t MirrorAddress(uint16_t addr) const;
 
         // Clocking
         void PreRender();
@@ -136,6 +146,13 @@ namespace Emulation::Graphics
 
         void FetchTiles();
         void EmitPixel();
+
+        uint16_t GetBackgroundPatternAddress(uint8_t tileId);
+        uint16_t GetAttributeAddress();
+        uint8_t GetColorFromPaletteRam(uint8_t palette, uint8_t pixel);
+
+        void CopyHorizontal();
+        void CopyVertical();
 
         void PPUWriteCallback(uint16_t address, uint8_t value);
         uint8_t PPUReadCallback(uint16_t address);
